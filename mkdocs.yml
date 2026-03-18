@@ -1,0 +1,73 @@
+site_name: codex-ai
+site_description: Agnostic LLM abstraction layer for Codex
+site_author: Codex Team
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+plugins:
+  - search
+  - include-markdown
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+            members_order: source
+            show_signature_annotations: true
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - Guide (EN):
+          - Core:
+              - Overview: en/architecture/core/README.md
+              - Data Flow: en/architecture/core/data_flow.md
+          - Providers:
+              - Overview: en/architecture/providers/README.md
+              - Data Flow: en/architecture/providers/data_flow.md
+      - Руководство (RU):
+          - Core:
+              - Обзор: ru/architecture/core/README.md
+              - Поток данных: ru/architecture/core/data_flow.md
+          - Провайдеры:
+              - Обзор: ru/architecture/providers/README.md
+              - Поток данных: ru/architecture/providers/data_flow.md
+  - API Reference:
+      - Overview: en/api/index.md
+      - Core:
+          - Protocol & Types: en/api/core/protocol.md
+          - Dispatcher: en/api/core/dispatcher.md
+          - Router: en/api/core/router.md
+          - Sync Dispatcher: en/api/core/sync.md
+          - Exceptions: en/api/core/exceptions.md
+      - Providers:
+          - OpenAI: en/api/providers/openai.md
+          - Gemini: en/api/providers/gemini.md
+          - Anthropic: en/api/providers/anthropic.md
+          - OpenRouter: en/api/providers/openrouter.md
+          - Multi: en/api/providers/multi.md
+  - Changelog: changelog.md
+
+extra:
+  version:
+    provider: mike
