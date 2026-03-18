@@ -8,7 +8,7 @@ Requires: ``pip install codex-ai[gemini]``
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 try:
     from google import genai
@@ -67,10 +67,13 @@ class GeminiProvider:
         Returns:
             Response text string, or a fallback error message on failure.
         """
-        messages: list[dict[str, Any]] = []
+        raw_messages: list[dict[str, Any]] = []
         for msg in prompt.messages:
             role = "model" if msg.role == "assistant" else "user" if msg.role == "user" else msg.role
-            messages.append({"role": role, "parts": [{"text": msg.content}]})
+            raw_messages.append({"role": role, "parts": [{"text": msg.content}]})
+
+        # Приводим к Any, так как типы в google.genai SDK часто некорректны (Union перегружен)
+        contents = cast(Any, raw_messages)
 
         model = prompt.model or kw.get("model") or self._model
         temperature = prompt.temperature or kw.get("temperature")
@@ -92,7 +95,7 @@ class GeminiProvider:
         try:
             response = await self._client.aio.models.generate_content(
                 model=model,
-                contents=messages,
+                contents=contents,
                 config=config,
             )
             return response.text or ""

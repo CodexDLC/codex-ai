@@ -90,7 +90,9 @@ def check_security() -> bool:
 
 def run_tests(marker: str = "unit") -> bool:
     print_step(f"Running {marker.capitalize()} Tests")
-    success, _ = run_command(f"pytest {TESTS_DIR} -m {marker} -v --tb=short")
+    # Integration tests skip when API keys are absent — disable coverage enforcement
+    extra = "--no-cov" if marker == "integration" else ""
+    success, _ = run_command(f"pytest {TESTS_DIR} -m {marker} -v --tb=short {extra}".strip())
     if success:
         print_success(f"{marker.capitalize()} tests passed.")
     else:

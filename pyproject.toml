@@ -8,14 +8,17 @@ dynamic = ["version"]
 description = "Agnostic LLM abstraction layer (OpenAI, Gemini, Anthropic) for Codex"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = { text = "Apache-2.0" }
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 authors = [{ name = "CodexDLC" }]
 keywords = ["llm", "openai", "google-genai", "anthropic", "waas"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "pydantic>=2.0,<3.0",
@@ -62,7 +65,7 @@ source = "vcs"
 packages = ["src/codex_ai"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py310"
 line-length = 120
 
 [tool.ruff.lint]
@@ -70,7 +73,7 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
 ignore = ["B008"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.10"
 strict = true
 plugins = ["pydantic.mypy"]
 
@@ -78,7 +81,8 @@ plugins = ["pydantic.mypy"]
 module = [
     "openai.*",
     "google.genai.*",
-    "anthropic.*"
+    "anthropic.*",
+    "codex_core.*"
 ]
 ignore_missing_imports = true
 
@@ -86,9 +90,18 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+addopts = "--cov=src/codex_ai --cov-report=term-missing"
 markers = [
     "unit: unit tests (no external dependencies)",
     "integration: integration tests (may require external services)",
+]
+
+[tool.coverage.report]
+fail_under = 90
+exclude_lines = [
+    "pragma: no cover",
+    "except ImportError",
+    "raise ImportError",
 ]
 
 [tool.bandit]

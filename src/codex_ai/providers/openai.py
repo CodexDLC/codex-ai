@@ -8,10 +8,11 @@ Requires: ``pip install codex-ai[openai]``
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 try:
     from openai import AsyncOpenAI
+    from openai.types.chat import ChatCompletionMessageParam
 except ImportError as e:
     if e.name == "openai":
         raise ImportError(
@@ -62,12 +63,14 @@ class OpenAIProvider:
         Returns:
             Response content string, or empty string if the model returned nothing.
         """
-        messages: list[dict[str, Any]] = [{"role": msg.role, "content": msg.content} for msg in prompt.messages]
+        raw_messages: list[dict[str, Any]] = [{"role": msg.role, "content": msg.content} for msg in prompt.messages]
         if prompt.system:
             if self._model.startswith(("o1", "o3")) or "gpt-4o" in self._model:
-                messages.insert(0, {"role": "developer", "content": prompt.system})
+                raw_messages.insert(0, {"role": "developer", "content": prompt.system})
             else:
-                messages.insert(0, {"role": "system", "content": prompt.system})
+                raw_messages.insert(0, {"role": "system", "content": prompt.system})
+
+        messages = cast(list[ChatCompletionMessageParam], raw_messages)
 
         model = prompt.model or kw.get("model") or self._model
         temperature = prompt.temperature or kw.get("temperature")
@@ -79,12 +82,16 @@ class OpenAIProvider:
         runtime_kw.pop("temperature", None)
         runtime_kw.pop("max_tokens", None)
 
+        # Убираем параметры, которые могут быть None, если API их не поддерживает в таком виде
+        if temperature is not None:
+            runtime_kw["temperature"] = temperature
+        if max_tokens is not None:
+            runtime_kw["max_tokens"] = max_tokens
+
         try:
             completion = await self._client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
                 **runtime_kw,
             )
             content = completion.choices[0].message.content if completion.choices else None

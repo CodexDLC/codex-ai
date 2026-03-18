@@ -8,10 +8,11 @@ Requires: ``pip install codex-ai[anthropic]``
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 try:
     from anthropic import AsyncAnthropic
+    from anthropic.types import MessageParam
 except ImportError as e:
     if e.name == "anthropic":
         raise ImportError(
@@ -44,7 +45,8 @@ class AnthropicProvider:
         """
         Send prompt to Anthropic and return response text.
         """
-        messages: list[dict[str, Any]] = [{"role": msg.role, "content": msg.content} for msg in prompt.messages]
+        raw_messages: list[dict[str, Any]] = [{"role": msg.role, "content": msg.content} for msg in prompt.messages]
+        messages = cast(list[MessageParam], raw_messages)
 
         # Anthropic uses a separate 'system' parameter
         system = prompt.system or None
@@ -59,15 +61,28 @@ class AnthropicProvider:
         runtime_kw.pop("max_tokens", None)
         runtime_kw.pop("temperature", None)
 
+        # Avoid passing None values to typed API arguments
+        if temperature is not None:
+            runtime_kw["temperature"] = temperature
+        if system is not None:
+            runtime_kw["system"] = system
+
         try:
             message = await self._client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
-                temperature=temperature,
-                system=system,
                 messages=messages,
                 **runtime_kw,
             )
-            return message.content[0].text if message.content else ""
+
+            if not message.content:
+                return ""
+
+            # Message content has different types. The safest way is to extract text if hasattr
+            content_block = message.content[0]
+            if hasattr(content_block, "text"):
+                return str(content_block.text)
+
+            return ""
         except Exception as exc:
             raise LLMProviderError(f"Anthropic error: {exc}") from exc

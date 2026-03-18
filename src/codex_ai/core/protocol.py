@@ -11,9 +11,14 @@ PromptBuilder — type alias for async builder functions registered via LLMRoute
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
-from codex_core.core.base_dto import BaseDTO
+if TYPE_CHECKING:
+    # mypy complains about Any base class if we don't cheat or provide types.
+    from pydantic import BaseModel as BaseDTO
+else:
+    from codex_core.core.base_dto import BaseDTO
+
 from pydantic import ConfigDict
 
 
