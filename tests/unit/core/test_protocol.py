@@ -3,7 +3,6 @@ from pydantic import ValidationError
 
 from codex_ai.core.protocol import LLMMessage, LLMProviderProtocol, PromptResult
 
-
 # ---------------------------------------------------------------------------
 # LLMMessage
 # ---------------------------------------------------------------------------

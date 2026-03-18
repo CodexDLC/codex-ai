@@ -1,4 +1,5 @@
 """Tests for AnthropicProvider."""
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -21,7 +22,7 @@ def _make_message(text: str | None = "hello from anthropic", has_text_attr: bool
 
 
 def _make_provider(model: str = "claude-3-5-sonnet-latest") -> tuple[AnthropicProvider, AsyncMock]:
-    provider = AnthropicProvider(api_key="test-key", model=model)
+    provider = AnthropicProvider(api_key="test-key", model=model)  # pragma: allowlist secret
     mock_create = AsyncMock(return_value=_make_message())
     provider._client = MagicMock()
     provider._client.messages.create = mock_create

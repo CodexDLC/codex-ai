@@ -1,5 +1,7 @@
 """Tests for the top-level public API and lazy-loader __getattr__ paths."""
 
+import pytest
+
 
 def test_lazy_import_openai_provider():
     from codex_ai import OpenAIProvider
@@ -45,18 +47,12 @@ def test_top_level_core_exports():
 def test_top_level_unknown_attr_raises():
     import codex_ai
 
-    try:
+    with pytest.raises(AttributeError):
         _ = codex_ai.NonExistentClass
-        assert False, "Expected AttributeError"
-    except AttributeError:
-        pass
 
 
 def test_providers_module_unknown_attr_raises():
     import codex_ai.providers as providers
 
-    try:
+    with pytest.raises(AttributeError):
         _ = providers.NonExistentProvider
-        assert False, "Expected AttributeError"
-    except AttributeError:
-        pass
