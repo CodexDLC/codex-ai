@@ -1,5 +1,6 @@
 """Tests for OpenAIProvider."""
-from unittest.mock import AsyncMock, MagicMock, patch
+
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -70,11 +71,11 @@ async def test_openai_builds_user_messages():
 @pytest.mark.parametrize(
     "model,expected_role",
     [
-        ("gpt-4o-mini", "developer"),   # contains "gpt-4o"
+        ("gpt-4o-mini", "developer"),  # contains "gpt-4o"
         ("gpt-4o", "developer"),
-        ("o1-mini", "developer"),       # startswith "o1"
-        ("o3", "developer"),            # startswith "o3"
-        ("gpt-3.5-turbo", "system"),    # plain system role
+        ("o1-mini", "developer"),  # startswith "o1"
+        ("o3", "developer"),  # startswith "o3"
+        ("gpt-3.5-turbo", "system"),  # plain system role
         ("gpt-4", "system"),
     ],
 )

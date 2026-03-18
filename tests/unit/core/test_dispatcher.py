@@ -1,7 +1,7 @@
 import pytest
 
 from codex_ai.core.dispatcher import LLMDispatcher
-from codex_ai.core.protocol import LLMMessage, PromptResult
+from codex_ai.core.protocol import PromptResult
 from codex_ai.core.router import LLMRouter
 
 
