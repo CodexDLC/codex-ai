@@ -1,0 +1,96 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "codex-ai"
+dynamic = ["version"]
+description = "Agnostic LLM abstraction layer (OpenAI, Gemini, Anthropic) for Codex"
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12"
+authors = [{ name = "CodexDLC" }]
+keywords = ["llm", "openai", "google-genai", "anthropic", "waas"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "pydantic>=2.0,<3.0",
+    "codex-core",
+]
+
+[project.urls]
+Homepage = "https://github.com/codexdlc/codex-ai"
+Documentation = "https://codexdlc.github.io/codex-ai/"
+Repository = "https://github.com/codexdlc/codex-ai"
+Issues = "https://github.com/codexdlc/codex-ai/issues"
+
+[project.optional-dependencies]
+openai = ["openai>=1.0,<2.0"]
+gemini = ["google-genai>=1.0"]
+anthropic = ["anthropic>=0.25"]
+all = [
+    "codex-ai[openai,gemini,anthropic]",
+]
+dev = [
+    "codex-ai[all]",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "pre-commit>=3.0",
+    "bandit>=1.7",
+    "pip-audit>=2.7",
+    "detect-secrets>=1.5",
+]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.0",
+    "mkdocstrings[python]>=0.24",
+    "mkdocs-include-markdown-plugin",
+    "mike>=2.0",
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/codex_ai"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "openai.*",
+    "google.genai.*",
+    "anthropic.*"
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "unit: unit tests (no external dependencies)",
+    "integration: integration tests (may require external services)",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B602", "B605", "B607", "B404"]
