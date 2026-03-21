@@ -7,20 +7,37 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   features:
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.sections
+    - navigation.expand
     - navigation.top
-    - search.highlight
+    - navigation.breadcrumbs
     - search.suggest
+    - search.highlight
     - content.code.copy
+    - content.code.annotate
+
+extra:
+  version:
+    provider: mike
+    default: latest
+
+extra_css:
+  - stylesheets/extra.css
 
 plugins:
   - search
@@ -32,20 +49,25 @@ plugins:
           options:
             show_source: true
             show_root_heading: true
+            show_root_full_path: false
+            show_category_heading: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            docstring_style: google
             members_order: source
-            show_signature_annotations: true
 
 nav:
   - Home: index.md
-  - Architecture:
-      - Guide (EN):
+  - Guide (EN):
+      - Architecture:
           - Core:
               - Overview: en/architecture/core/README.md
               - Data Flow: en/architecture/core/data_flow.md
           - Providers:
               - Overview: en/architecture/providers/README.md
               - Data Flow: en/architecture/providers/data_flow.md
-      - Руководство (RU):
+  - Руководство (RU):
+      - Архитектура:
           - Core:
               - Обзор: ru/architecture/core/README.md
               - Поток данных: ru/architecture/core/data_flow.md
@@ -67,7 +89,3 @@ nav:
           - OpenRouter: en/api/providers/openrouter.md
           - Multi: en/api/providers/multi.md
   - Changelog: changelog.md
-
-extra:
-  version:
-    provider: mike
