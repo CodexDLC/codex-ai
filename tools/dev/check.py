@@ -9,6 +9,8 @@ from codex_core.dev.check_runner import BaseCheckRunner
 class CheckRunner(BaseCheckRunner):
     PROJECT_NAME = "codex-ai"
     INTEGRATION_REQUIRES = "API keys (OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY)"
+    # CVE-2026-4539: pygments — no fix available yet (latest version)
+    AUDIT_FLAGS = "--skip-editable --ignore-vuln CVE-2026-4539"
 
     def run_tests(self, marker: str = "unit") -> bool:
         if marker == "integration":
