@@ -2,8 +2,7 @@
 Integration tests for LLM providers.
 
 Required env vars (set in .env or shell):
-    OPENAI_API_KEY     — for OpenAI / OpenRouter tests
-    ANTHROPIC_API_KEY  — for Anthropic tests
+    OPENAI_API_KEY     — for OpenAI tests
     GOOGLE_API_KEY     — for Gemini tests
 
 Run:
@@ -60,38 +59,6 @@ async def test_openai_dispatcher_end_to_end():
 
 
 # ---------------------------------------------------------------------------
-# Anthropic
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-@pytest.mark.skipif(not os.getenv("ANTHROPIC_API_KEY"), reason="ANTHROPIC_API_KEY not set")
-async def test_anthropic_provider_real_call():
-    from codex_ai.providers.anthropic_ import AnthropicProvider
-
-    provider = AnthropicProvider(api_key=os.environ["ANTHROPIC_API_KEY"])
-    result = await provider.answer(_simple_prompt(), max_tokens=10)
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
-@pytest.mark.integration
-@pytest.mark.skipif(not os.getenv("ANTHROPIC_API_KEY"), reason="ANTHROPIC_API_KEY not set")
-async def test_anthropic_with_system_prompt():
-    from codex_ai.providers.anthropic_ import AnthropicProvider
-
-    provider = AnthropicProvider(api_key=os.environ["ANTHROPIC_API_KEY"])
-    prompt = PromptResult(
-        messages=[LLMMessage(role="user", content="What are you?")],
-        system="You are a helpful assistant. Answer in one word.",
-        max_tokens=20,
-    )
-    result = await provider.answer(prompt)
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
-# ---------------------------------------------------------------------------
 # Gemini
 # ---------------------------------------------------------------------------
 
@@ -119,47 +86,5 @@ async def test_gemini_with_system_instruction():
         max_tokens=10,
     )
     result = await provider.answer(prompt)
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
-# ---------------------------------------------------------------------------
-# OpenRouter
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-@pytest.mark.skipif(not os.getenv("OPENROUTER_API_KEY"), reason="OPENROUTER_API_KEY not set")
-async def test_openrouter_provider_real_call():
-    from codex_ai.providers.openrouter import OpenRouterProvider
-
-    provider = OpenRouterProvider(api_key=os.environ["OPENROUTER_API_KEY"])
-    result = await provider.answer(_simple_prompt(), max_tokens=10)
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
-# ---------------------------------------------------------------------------
-# MultiLLMProvider
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-@pytest.mark.skipif(
-    not (os.getenv("OPENAI_API_KEY") and os.getenv("GOOGLE_API_KEY")),
-    reason="OPENAI_API_KEY and GOOGLE_API_KEY required for multi-provider test",
-)
-async def test_multi_provider_failover_integration():
-    """Primary provider fails (bad key) → falls back to Gemini."""
-    from codex_ai.providers.gemini import GeminiProvider
-    from codex_ai.providers.multi import MultiLLMProvider
-    from codex_ai.providers.openai import OpenAIProvider
-
-    providers = {
-        "openai": OpenAIProvider(api_key="invalid-key-to-trigger-failover"),
-        "gemini": GeminiProvider(api_key=os.environ["GOOGLE_API_KEY"]),
-    }
-    multi = MultiLLMProvider(providers=providers, default="openai", failover_list=["gemini"])
-    result = await multi.answer(_simple_prompt())
     assert isinstance(result, str)
     assert len(result) > 0

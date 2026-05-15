@@ -2,62 +2,47 @@
 
 ## Назначение
 
-`codex_ai.providers` содержит конкретные реализации `LLMProviderProtocol`. Каждый провайдер оборачивает SDK вендора, транслирует `PromptResult` в формат вендора и поднимает `LLMProviderError` при ошибке.
+`codex_ai.providers` содержит адаптеры для API, которые сейчас реально поддерживаются библиотекой: Gemini и OpenAI.
 
-## Зачем это модуль
+Gemini является основным направлением и дает прямые методы для текста, JSON и картинок:
 
-| Проблема | Что ломается |
-|----------|-------------|
-| У каждого SDK разная поверхность API | Бизнес-код должен знать об `AsyncOpenAI`, `genai.Client`, `AsyncAnthropic` |
-| System-сообщения работают по-разному у вендоров | OpenAI использует роль `developer`/`system`, Gemini — `system_instruction`, Anthropic — top-level параметр `system` |
-| Production-системы нуждаются в fallback при ошибках API | Система с одним провайдером падает при недоступности вендора |
+```python
+await gemini.generate_text(...)
+await gemini.generate_json(...)
+await gemini.generate_image_bytes(...)
+```
 
-`providers` решает это через единый интерфейс `answer(prompt, **kw) → str` и `MultiLLMProvider` с автоматическим failover.
+OpenAI оставлен как текстовый провайдер с `generate_text(...)`.
 
 ## Архитектура
 
 ```
-                    LLMProviderProtocol
-                   .answer(prompt, **kw)
-                          │
-        ┌─────────────────┼──────────────────────┐
-        │                 │                      │
-        ▼                 ▼                      ▼
-┌──────────────┐ ┌──────────────┐   ┌────────────────────┐
-│OpenAIProvider│ │GeminiProvider│   │  MultiLLMProvider  │
-│              │ │              │   │                    │
-│ AsyncOpenAI  │ │ genai.Client │   │ {name: provider}   │
-│ gpt-4o-mini  │ │ gemini-2.5   │   │ default + failover │
-└──────────────┘ └──────────────┘   └──────────┬─────────┘
-                                               │
-                        ┌──────────────────────┼───────────────────┐
-                        ▼                      ▼                   ▼
-               OpenAIProvider        GeminiProvider       AnthropicProvider
-               (основной)            (failover[0])        (failover[1])
+PromptResult/String
+      │
+      ├── GeminiProvider.generate_text(...)        -> str
+      ├── GeminiProvider.generate_json(...)        -> dict | BaseModel
+      ├── GeminiProvider.generate_image_bytes(...) -> tuple[bytes, str]
+      └── OpenAIProvider.generate_text(...)        -> str
 ```
 
-**OpenRouterProvider** расширяет `OpenAIProvider` с переопределённым `base_url` — полная совместимость с OpenAI SDK, сотни моделей.
+Старый router pipeline остается доступным:
+
+```
+LLMRouter builder -> PromptResult -> LLMDispatcher.process() -> provider.answer() -> str
+```
+
+`answer()` является compatibility-wrapper для текстовой генерации.
 
 ## Ключевые компоненты
 
 | Компонент | Класс | SDK | Модель по умолчанию |
 |-----------|-------|-----|---------------------|
-| `openai.py` | `OpenAIProvider` | `openai` | `gpt-4o-mini` |
 | `gemini.py` | `GeminiProvider` | `google-genai` | `gemini-2.5-flash-lite` |
-| `anthropic_.py` | `AnthropicProvider` | `anthropic` | `claude-3-5-sonnet-latest` |
-| `openrouter.py` | `OpenRouterProvider` | `openai` (remapped) | бесплатная Gemini через OpenRouter |
-| `multi.py` | `MultiLLMProvider` | — | настраиваемый |
+| `openai.py` | `OpenAIProvider` | `openai` | `gpt-4o-mini` |
 
 ## Ключевые решения
 
-- **Lazy imports** — классы провайдеров не импортируются при загрузке пакета. `from codex_ai import OpenAIProvider` импортирует SDK `openai` только при выполнении этой строки. Установка `codex-ai[gemini]` не тянет OpenAI SDK.
-- **Поля `PromptResult` имеют приоритет над `**kw`** — если `prompt.model` задан, он перекрывает любой `model=` из kwargs. Намерение билдера приоритетнее call-site переопределений.
-- **Инференс провайдера в `MultiLLMProvider`** — префикс имени модели автоматически выбирает провайдер: `gpt-*` → openai, `gemini-*` → gemini, `claude-*` → anthropic, `vendor/model` → openrouter. Явный `provider=` в kwargs всегда побеждает.
-- **Failover только на `LLMProviderError`** — каждый провайдер оборачивает SDK-исключения в `LLMProviderError`. Только они запускают failover-цепочку; неожиданные исключения пробрасываются немедленно.
-- **Кастомные провайдеры не требуют регистрации** — реализуйте `async def answer(self, prompt: PromptResult, **kw) -> str` и передайте экземпляр напрямую в `LLMDispatcher`.
-
-## См. также
-
-- [Поток данных](data_flow.md) — трансляция формата сообщений по вендорам
-- [Обзор Core](../core/README.md) — как провайдеры подключаются к диспетчеру
-- [API Reference: Провайдеры](../../../en/api/providers/openai.md) — полная документация классов
+- Возможности Gemini представлены напрямую, без широкой универсальной абстракции.
+- JSON generation использует native JSON config провайдера и локальную проверку через `json.loads` и optional Pydantic schema.
+- Image generation возвращает raw bytes и фактический MIME type от Gemini.
+- Anthropic, OpenRouter и multi-provider failover не являются активными API в этой alpha-линейке.

@@ -1,5 +1,5 @@
 site_name: codex-ai
-site_description: Agnostic LLM abstraction layer for Codex
+site_description: Gemini-first and OpenAI provider helpers for Codex
 site_author: Codex Team
 
 theme:
@@ -85,7 +85,4 @@ nav:
       - Providers:
           - OpenAI: en/api/providers/openai.md
           - Gemini: en/api/providers/gemini.md
-          - Anthropic: en/api/providers/anthropic.md
-          - OpenRouter: en/api/providers/openrouter.md
-          - Multi: en/api/providers/multi.md
   - Changelog: changelog.md

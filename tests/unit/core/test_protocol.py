@@ -1,7 +1,14 @@
 import pytest
 from pydantic import ValidationError
 
-from codex_ai.core.protocol import ImageGenerationProvider, LLMMessage, LLMProviderProtocol, PromptResult
+from codex_ai.core.protocol import (
+    ImageGenerationProvider,
+    JsonGenerationProvider,
+    LLMMessage,
+    LLMProviderProtocol,
+    PromptResult,
+    TextGenerationProvider,
+)
 
 # ---------------------------------------------------------------------------
 # LLMMessage
@@ -107,3 +114,26 @@ def test_image_generation_provider_structural_check():
 
 def test_object_without_generate_image_bytes_fails_image_provider_check():
     assert not isinstance(object(), ImageGenerationProvider)
+
+
+def test_text_generation_provider_structural_check():
+    class MockTextProvider:
+        async def generate_text(self, prompt: PromptResult | str, *, model: str | None = None, **kwargs) -> str:
+            return "text"
+
+    assert isinstance(MockTextProvider(), TextGenerationProvider)
+
+
+def test_json_generation_provider_structural_check():
+    class MockJsonProvider:
+        async def generate_json(
+            self,
+            prompt: PromptResult | str,
+            *,
+            schema=None,
+            model: str | None = None,
+            **kwargs,
+        ):
+            return {}
+
+    assert isinstance(MockJsonProvider(), JsonGenerationProvider)

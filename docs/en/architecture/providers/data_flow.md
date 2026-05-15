@@ -1,42 +1,44 @@
 # Providers — Data Flow
 
-## Single Provider
+## Gemini Text
 
 ```
-LLMDispatcher
-    │
-    └── OpenAIProvider.answer(prompt)
-            │
-            ├── Convert LLMMessage list → OpenAI messages format
-            ├── Insert system message if present
-            ├── Extract model / temperature / max_tokens from prompt or kw
-            └── AsyncOpenAI.chat.completions.create(...)
-                        │
-                        ▼
-                   response text: str
+PromptResult | str
+    -> GeminiProvider.generate_text()
+    -> google.genai.models.generate_content()
+    -> response.text
+    -> str
 ```
 
-## MultiLLMProvider Failover
+`GeminiProvider.answer()` delegates to `generate_text()` for compatibility with `LLMDispatcher.process()`.
+
+## Gemini JSON
 
 ```
-LLMDispatcher
-    │
-    └── MultiLLMProvider.answer(prompt, provider="openai")
-            │
-            ├── Determine target: explicit / model-prefix / default
-            ├── Try primary provider
-            │       ├── Success → return text
-            │       └── LLMProviderError → log error, try next
-            ├── Try failover_list[0]
-            │       ├── Success → return text
-            │       └── LLMProviderError → try next
-            └── All failed → raise last LLMProviderError
+PromptResult | str
+    -> GeminiProvider.generate_json(schema=...)
+    -> GenerateContentConfig(response_mime_type="application/json", response_schema=schema)
+    -> response.text
+    -> json.loads()
+    -> optional Pydantic validation
 ```
 
-## Message Format Translation
+## Gemini Images
 
-| Field | OpenAI | Gemini | Anthropic |
-|-------|--------|--------|-----------|
-| `role: user` | `role: "user"` | `role: "user"` | `role: "user"` |
-| `role: assistant` | `role: "assistant"` | `role: "model"` | `role: "assistant"` |
-| `system` | inserted as `developer`/`system` message | `system_instruction` config | top-level `system` param |
+```
+prompt: str
+    -> GeminiProvider.generate_image_bytes()
+    -> GenerateContentConfig(response_modalities=[IMAGE])
+    -> first inline_data image part
+    -> (bytes, actual_mime_type)
+```
+
+## OpenAI Text
+
+```
+PromptResult | str
+    -> OpenAIProvider.generate_text()
+    -> chat.completions.create()
+    -> choices[0].message.content
+    -> str
+```

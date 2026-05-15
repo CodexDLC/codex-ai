@@ -53,36 +53,51 @@ class OpenAIProvider:
 
     async def answer(self, prompt: PromptResult, **kw: Any) -> str:
         """
+        Compatibility wrapper for the legacy text pipeline.
+        """
+        return await self.generate_text(prompt, **kw)
+
+    async def generate_text(
+        self,
+        prompt: PromptResult | str,
+        *,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """
         Send prompt to OpenAI and return response text.
 
         Args:
-            prompt: PromptResult with messages list and optional system string.
-            **kw: Extra kwargs forwarded to ``chat.completions.create``
+            prompt: PromptResult with messages list or a raw prompt string.
+            model: Optional model override for this request.
+            **kwargs: Extra kwargs forwarded to ``chat.completions.create``
                   (e.g., ``temperature``, ``max_tokens``).
 
         Returns:
             Response content string, or empty string if the model returned nothing.
         """
-        raw_messages: list[dict[str, Any]] = [{"role": msg.role, "content": msg.content} for msg in prompt.messages]
-        if prompt.system:
-            if self._model.startswith(("o1", "o3")) or "gpt-4o" in self._model:
-                raw_messages.insert(0, {"role": "developer", "content": prompt.system})
+        raw_messages = self._build_messages(prompt)
+        selected_model = self._select_model(prompt, model=model, runtime_kwargs=kwargs)
+
+        system = self._get_prompt_attr(prompt, "system")
+        if system:
+            if selected_model.startswith(("o1", "o3")) or "gpt-4o" in selected_model:
+                raw_messages.insert(0, {"role": "developer", "content": system})
             else:
-                raw_messages.insert(0, {"role": "system", "content": prompt.system})
+                raw_messages.insert(0, {"role": "system", "content": system})
 
         messages = cast(list[ChatCompletionMessageParam], raw_messages)
 
-        model = prompt.model or kw.get("model") or self._model
-        temperature = prompt.temperature or kw.get("temperature")
-        max_tokens = prompt.max_tokens or kw.get("max_tokens")
+        temperature = self._get_prompt_attr(prompt, "temperature") or kwargs.get("temperature")
+        max_tokens = self._get_prompt_attr(prompt, "max_tokens") or kwargs.get("max_tokens")
 
-        # Удаляем из kw те параметры, которые мы уже вытащили или которые нельзя дублировать
-        runtime_kw = kw.copy()
+        # Remove params already extracted from kw or that cannot be duplicated
+        runtime_kw = kwargs.copy()
         runtime_kw.pop("model", None)
         runtime_kw.pop("temperature", None)
         runtime_kw.pop("max_tokens", None)
 
-        # Убираем параметры, которые могут быть None, если API их не поддерживает в таком виде
+        # Strip None-valued params — the API does not accept them as keyword arguments
         if temperature is not None:
             runtime_kw["temperature"] = temperature
         if max_tokens is not None:
@@ -90,7 +105,7 @@ class OpenAIProvider:
 
         try:
             completion = await self._client.chat.completions.create(
-                model=model,
+                model=selected_model,
                 messages=messages,
                 **runtime_kw,
             )
@@ -98,3 +113,25 @@ class OpenAIProvider:
             return content or ""
         except Exception as exc:
             raise LLMProviderError(f"OpenAI error: {exc}") from exc
+
+    @staticmethod
+    def _build_messages(prompt: PromptResult | str) -> list[dict[str, Any]]:
+        if isinstance(prompt, str):
+            return [{"role": "user", "content": prompt}]
+        return [{"role": msg.role, "content": msg.content} for msg in prompt.messages]
+
+    def _select_model(
+        self,
+        prompt: PromptResult | str,
+        *,
+        model: str | None,
+        runtime_kwargs: dict[str, Any],
+    ) -> str:
+        prompt_model = self._get_prompt_attr(prompt, "model")
+        return prompt_model or model or runtime_kwargs.get("model") or self._model
+
+    @staticmethod
+    def _get_prompt_attr(prompt: PromptResult | str, name: str) -> Any:
+        if isinstance(prompt, str):
+            return None
+        return getattr(prompt, name)

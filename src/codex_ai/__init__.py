@@ -1,7 +1,8 @@
-"""codex-ai: Agnostic LLM abstraction layer (OpenAI, Gemini, Anthropic)."""
+"""codex-ai: Gemini-first and OpenAI provider helpers for Codex."""
 
 from codex_ai.core import (
     ImageGenerationProvider,
+    JsonGenerationProvider,
     LLMDispatcher,
     LLMMessage,
     LLMProviderError,
@@ -10,12 +11,14 @@ from codex_ai.core import (
     PromptBuilder,
     PromptResult,
     SyncLLMDispatcher,
+    TextGenerationProvider,
 )
 
 __all__ = [
     # Core
     "LLMDispatcher",
     "ImageGenerationProvider",
+    "JsonGenerationProvider",
     "LLMMessage",
     "LLMProviderError",
     "LLMProviderProtocol",
@@ -23,18 +26,16 @@ __all__ = [
     "PromptBuilder",
     "PromptResult",
     "SyncLLMDispatcher",
+    "TextGenerationProvider",
     # Providers (lazy)
     "OpenAIProvider",
     "GeminiProvider",
-    "AnthropicProvider",
-    "OpenRouterProvider",
-    "MultiLLMProvider",
 ]
 
 
 def __getattr__(name: str) -> object:
     """Lazy-load provider classes to avoid mandatory SDK dependencies."""
-    if name in ("OpenAIProvider", "GeminiProvider", "AnthropicProvider", "OpenRouterProvider", "MultiLLMProvider"):
+    if name in ("OpenAIProvider", "GeminiProvider"):
         from codex_ai import providers
 
         return getattr(providers, name)

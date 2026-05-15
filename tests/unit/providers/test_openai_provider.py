@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from codex_ai.core.exceptions import LLMProviderError
-from codex_ai.core.protocol import LLMMessage, LLMProviderProtocol, PromptResult
+from codex_ai.core.protocol import LLMMessage, LLMProviderProtocol, PromptResult, TextGenerationProvider
 from codex_ai.providers.openai import OpenAIProvider
 
 
@@ -36,6 +36,11 @@ def _make_provider(model: str = "gpt-4o-mini") -> tuple[OpenAIProvider, AsyncMoc
 def test_openai_provider_satisfies_protocol():
     provider = OpenAIProvider(api_key="x")
     assert isinstance(provider, LLMProviderProtocol)
+
+
+def test_openai_provider_satisfies_text_generation_protocol():
+    provider = OpenAIProvider(api_key="x")
+    assert isinstance(provider, TextGenerationProvider)
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +242,19 @@ async def test_openai_returns_empty_string_when_content_none():
     prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
     result = await provider.answer(prompt)
     assert result == ""
+
+
+async def test_openai_generate_text_accepts_raw_prompt_string():
+    provider, mock_create = _make_provider()
+    mock_create.return_value = _make_completion("raw response")
+
+    result = await provider.generate_text("hello", model="gpt-4o-mini", temperature=0.1)
+
+    _, kwargs = mock_create.call_args
+    assert kwargs["messages"] == [{"role": "user", "content": "hello"}]
+    assert kwargs["model"] == "gpt-4o-mini"
+    assert kwargs["temperature"] == 0.1
+    assert result == "raw response"
 
 
 # ---------------------------------------------------------------------------

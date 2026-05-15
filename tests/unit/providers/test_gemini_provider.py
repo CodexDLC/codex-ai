@@ -4,9 +4,17 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import BaseModel
 
 from codex_ai.core.exceptions import LLMProviderError
-from codex_ai.core.protocol import ImageGenerationProvider, LLMMessage, LLMProviderProtocol, PromptResult
+from codex_ai.core.protocol import (
+    ImageGenerationProvider,
+    JsonGenerationProvider,
+    LLMMessage,
+    LLMProviderProtocol,
+    PromptResult,
+    TextGenerationProvider,
+)
 from codex_ai.providers.gemini import GeminiProvider
 
 
@@ -39,6 +47,18 @@ def test_gemini_provider_satisfies_image_generation_protocol():
     with patch("codex_ai.providers.gemini.genai_types"):
         provider = GeminiProvider(api_key="x")
     assert isinstance(provider, ImageGenerationProvider)
+
+
+def test_gemini_provider_satisfies_text_generation_protocol():
+    with patch("codex_ai.providers.gemini.genai_types"):
+        provider = GeminiProvider(api_key="x")
+    assert isinstance(provider, TextGenerationProvider)
+
+
+def test_gemini_provider_satisfies_json_generation_protocol():
+    with patch("codex_ai.providers.gemini.genai_types"):
+        provider = GeminiProvider(api_key="x")
+    assert isinstance(provider, JsonGenerationProvider)
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +246,72 @@ async def test_gemini_returns_empty_string_when_text_none():
         result = await provider.answer(prompt)
 
     assert result == ""
+
+
+async def test_gemini_generate_text_accepts_raw_prompt_string():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = MagicMock(text="raw response")
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        result = await provider.generate_text("hello", model="gemini-text", temperature=0.1)
+
+    _, kwargs = mock_generate.call_args
+    assert kwargs["contents"] == "hello"
+    assert kwargs["model"] == "gemini-text"
+    assert result == "raw response"
+
+
+class LootItem(BaseModel):
+    name: str
+    power: int
+
+
+async def test_gemini_generate_json_returns_dict_without_schema():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = MagicMock(text='{"name": "sword", "power": 7}')
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        result = await provider.generate_json("make loot")
+
+    config_kwargs = mock_types.GenerateContentConfig.call_args.kwargs
+    assert config_kwargs["response_mime_type"] == "application/json"
+    assert "response_schema" not in config_kwargs
+    assert result == {"name": "sword", "power": 7}
+
+
+async def test_gemini_generate_json_validates_schema():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = MagicMock(text='{"name": "sword", "power": 7}')
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        result = await provider.generate_json("make loot", schema=LootItem)
+
+    config_kwargs = mock_types.GenerateContentConfig.call_args.kwargs
+    assert config_kwargs["response_schema"] is LootItem
+    assert result == LootItem(name="sword", power=7)
+
+
+async def test_gemini_generate_json_raises_on_invalid_json():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = MagicMock(text="not json")
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        with pytest.raises(LLMProviderError, match="invalid JSON"):
+            await provider.generate_json("make loot")
+
+
+async def test_gemini_generate_json_raises_on_schema_validation_error():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = MagicMock(text='{"name": "sword"}')
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        with pytest.raises(LLMProviderError, match="schema validation"):
+            await provider.generate_json("make loot", schema=LootItem)
 
 
 # ---------------------------------------------------------------------------

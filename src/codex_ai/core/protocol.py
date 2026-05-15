@@ -5,6 +5,8 @@ Core types and contracts for the LLM abstraction layer.
 
 PromptResult — frozen DTO returned by every prompt builder.
 LLMProviderProtocol — adapter contract for LLM backends (OpenAI, Gemini, etc.).
+TextGenerationProvider — optional adapter contract for direct text generation.
+JsonGenerationProvider — optional adapter contract for direct JSON generation.
 ImageGenerationProvider — optional adapter contract for binary image generation.
 PromptBuilder — type alias for async builder functions registered via LLMRouter.
 """
@@ -14,13 +16,13 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
+from pydantic import BaseModel, ConfigDict
+
 if TYPE_CHECKING:
     # mypy complains about Any base class if we don't cheat or provide types.
     from pydantic import BaseModel as BaseDTO
 else:
     from codex_core.core.base_dto import BaseDTO
-
-from pydantic import ConfigDict
 
 
 class LLMMessage(BaseDTO):
@@ -87,6 +89,45 @@ class LLMProviderProtocol(Protocol):
 
         Returns:
             Response text from the LLM.
+        """
+        ...
+
+
+@runtime_checkable
+class TextGenerationProvider(Protocol):
+    """
+    Optional adapter contract for direct provider text generation.
+    """
+
+    async def generate_text(
+        self,
+        prompt: PromptResult | str,
+        *,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Generate plain text from a prompt DTO or a raw prompt string.
+        """
+        ...
+
+
+@runtime_checkable
+class JsonGenerationProvider(Protocol):
+    """
+    Optional adapter contract for provider-native JSON generation.
+    """
+
+    async def generate_json(
+        self,
+        prompt: PromptResult | str,
+        *,
+        schema: type[BaseModel] | None = None,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Generate JSON and validate it locally when a Pydantic schema is provided.
         """
         ...
 

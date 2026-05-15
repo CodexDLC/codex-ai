@@ -131,6 +131,14 @@ class ImageProvider:
         self.calls.append((prompt, model, response_mime_type, kwargs))
         return b"image-bytes", "image/png"
 
+    async def generate_text(self, prompt: PromptResult | str, *, model: str | None = None, **kwargs) -> str:
+        self.calls.append((prompt, model, kwargs))
+        return "direct text"
+
+    async def generate_json(self, prompt: PromptResult | str, *, schema=None, model: str | None = None, **kwargs):
+        self.calls.append((prompt, schema, model, kwargs))
+        return {"ok": True}
+
 
 async def test_dispatcher_generate_image_bytes_delegates_to_image_provider():
     provider = ImageProvider()
@@ -157,3 +165,23 @@ async def test_dispatcher_generate_image_bytes_raises_for_unsupported_provider(m
         await dispatcher.generate_image_bytes("draw a castle")
 
     assert mock_provider.calls == []
+
+
+async def test_dispatcher_generate_text_delegates_to_text_provider():
+    provider = ImageProvider()
+    dispatcher = LLMDispatcher(provider=provider)
+
+    result = await dispatcher.generate_text("hello", model="gemini-text", temperature=0.2)
+
+    assert result == "direct text"
+    assert provider.calls == [("hello", "gemini-text", {"temperature": 0.2})]
+
+
+async def test_dispatcher_generate_json_delegates_to_json_provider():
+    provider = ImageProvider()
+    dispatcher = LLMDispatcher(provider=provider)
+
+    result = await dispatcher.generate_json("json please", schema=None, model="gemini-text")
+
+    assert result == {"ok": True}
+    assert provider.calls == [("json please", None, "gemini-text", {})]

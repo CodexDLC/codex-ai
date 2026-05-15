@@ -12,7 +12,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .protocol import ImageGenerationProvider, LLMProviderProtocol, PromptResult
+from .protocol import (
+    ImageGenerationProvider,
+    JsonGenerationProvider,
+    LLMProviderProtocol,
+    PromptResult,
+    TextGenerationProvider,
+)
 from .router import LLMRouter
 
 log = logging.getLogger(__name__)
@@ -100,8 +106,7 @@ class LLMDispatcher:
         if not isinstance(self._provider, ImageGenerationProvider):
             provider_name = type(self._provider).__name__
             raise TypeError(
-                f"Provider {provider_name} does not support image generation; "
-                "expected generate_image_bytes(...)"
+                f"Provider {provider_name} does not support image generation; expected generate_image_bytes(...)"
             )
 
         return await self._provider.generate_image_bytes(
@@ -110,3 +115,36 @@ class LLMDispatcher:
             response_mime_type=response_mime_type,
             **kwargs,
         )
+
+    async def generate_text(
+        self,
+        prompt: PromptResult | str,
+        *,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Generate text directly through a provider that supports direct text generation.
+        """
+        if not isinstance(self._provider, TextGenerationProvider):
+            provider_name = type(self._provider).__name__
+            raise TypeError(f"Provider {provider_name} does not support text generation; expected generate_text(...)")
+
+        return await self._provider.generate_text(prompt, model=model, **kwargs)
+
+    async def generate_json(
+        self,
+        prompt: PromptResult | str,
+        *,
+        schema: Any = None,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Generate JSON directly through a provider that supports JSON generation.
+        """
+        if not isinstance(self._provider, JsonGenerationProvider):
+            provider_name = type(self._provider).__name__
+            raise TypeError(f"Provider {provider_name} does not support JSON generation; expected generate_json(...)")
+
+        return await self._provider.generate_json(prompt, schema=schema, model=model, **kwargs)

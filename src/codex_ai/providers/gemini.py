@@ -8,6 +8,7 @@ Requires: ``pip install codex-ai[gemini]``
 
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 
 try:
@@ -19,6 +20,8 @@ except ImportError as e:
             "GeminiProvider requires the 'google-genai' package. Install it with: pip install codex-ai[gemini]"
         ) from e
     raise
+
+from pydantic import BaseModel, ValidationError
 
 from codex_ai.core.exceptions import LLMProviderError
 from codex_ai.core.protocol import PromptResult
@@ -59,37 +62,39 @@ class GeminiProvider:
 
     async def answer(self, prompt: PromptResult, **kw: Any) -> str:
         """
+        Compatibility wrapper for the legacy text pipeline.
+        """
+        return await self.generate_text(prompt, **kw)
+
+    async def generate_text(
+        self,
+        prompt: PromptResult | str,
+        *,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """
         Send prompt to Gemini and return response text.
 
         Args:
-            prompt: PromptResult with messages list (Gemini contents format)
-                    and optional system instruction string.
-            **kw: Extra kwargs forwarded to ``generate_content``
+            prompt: PromptResult with messages list or a raw prompt string.
+            model: Optional model override for this request.
+            **kwargs: Extra kwargs forwarded to ``generate_content``
                   (e.g., ``temperature`` via ``GenerateContentConfig``).
 
         Returns:
             Response text string, or a fallback error message on failure.
         """
-        raw_messages: list[dict[str, Any]] = []
-        for msg in prompt.messages:
-            role = "model" if msg.role == "assistant" else "user" if msg.role == "user" else msg.role
-            raw_messages.append({"role": role, "parts": [{"text": msg.content}]})
+        contents = self._build_text_contents(prompt)
+        selected_model = self._select_text_model(prompt, model=model, runtime_kwargs=kwargs)
+        temperature = self._get_prompt_attr(prompt, "temperature") or kwargs.get("temperature")
+        max_tokens = self._get_prompt_attr(prompt, "max_tokens") or kwargs.get("max_tokens")
 
-        # Cast to Any — google.genai SDK types are often incorrect (Union is overloaded)
-        contents = cast(Any, raw_messages)
-
-        model = prompt.model or kw.get("model") or self._model
-        temperature = prompt.temperature or kw.get("temperature")
-        max_tokens = prompt.max_tokens or kw.get("max_tokens")
-
-        # Remove params already extracted from kw to avoid duplicate kwargs
-        runtime_kw = kw.copy()
-        runtime_kw.pop("model", None)
-        runtime_kw.pop("temperature", None)
-        runtime_kw.pop("max_tokens", None)
+        runtime_kw = kwargs.copy()
+        self._strip_common_text_kwargs(runtime_kw)
 
         config = genai_types.GenerateContentConfig(
-            system_instruction=prompt.system or None,
+            system_instruction=self._get_prompt_attr(prompt, "system") or None,
             temperature=temperature,
             max_output_tokens=max_tokens,
             **runtime_kw,
@@ -97,13 +102,74 @@ class GeminiProvider:
 
         try:
             response = await self._client.aio.models.generate_content(
-                model=model,
+                model=selected_model,
                 contents=contents,
                 config=config,
             )
             return response.text or ""
         except Exception as exc:
             raise LLMProviderError(f"Gemini error: {exc}") from exc
+
+    async def generate_json(
+        self,
+        prompt: PromptResult | str,
+        *,
+        schema: type[BaseModel] | None = None,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Generate JSON with Gemini-native response configuration and local validation.
+        """
+        contents = self._build_text_contents(prompt)
+        selected_model = self._select_text_model(prompt, model=model, runtime_kwargs=kwargs)
+        temperature = self._get_prompt_attr(prompt, "temperature") or kwargs.get("temperature")
+        max_tokens = self._get_prompt_attr(prompt, "max_tokens") or kwargs.get("max_tokens")
+
+        runtime_kw = kwargs.copy()
+        self._strip_common_text_kwargs(runtime_kw)
+        runtime_kw.pop("response_mime_type", None)
+        runtime_kw.pop("response_schema", None)
+        runtime_kw.pop("schema", None)
+
+        config_kwargs: dict[str, Any] = {
+            "system_instruction": self._get_prompt_attr(prompt, "system") or None,
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+            "response_mime_type": "application/json",
+            **runtime_kw,
+        }
+        if schema is not None:
+            config_kwargs["response_schema"] = schema
+
+        config = genai_types.GenerateContentConfig(**config_kwargs)
+
+        try:
+            response = await self._client.aio.models.generate_content(
+                model=selected_model,
+                contents=contents,
+                config=config,
+            )
+            text = response.text or ""
+            if not text.strip():
+                raise LLMProviderError("Gemini JSON generation returned an empty response")
+
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise LLMProviderError(f"Gemini JSON generation returned invalid JSON: {exc}") from exc
+
+            if schema is None:
+                return data
+
+            try:
+                return schema.model_validate(data)
+            except ValidationError as exc:
+                raise LLMProviderError(f"Gemini JSON generation failed schema validation: {exc}") from exc
+        except LLMProviderError:
+            raise
+        except Exception as exc:
+            raise LLMProviderError(f"Gemini JSON generation error: {exc}") from exc
 
     async def generate_image_bytes(
         self,
@@ -202,3 +268,37 @@ class GeminiProvider:
                 collected.extend(candidate_parts)
 
         return collected
+
+    @staticmethod
+    def _build_text_contents(prompt: PromptResult | str) -> Any:
+        if isinstance(prompt, str):
+            return prompt
+
+        raw_messages: list[dict[str, Any]] = []
+        for msg in prompt.messages:
+            role = "model" if msg.role == "assistant" else "user" if msg.role == "user" else msg.role
+            raw_messages.append({"role": role, "parts": [{"text": msg.content}]})
+
+        return cast(Any, raw_messages)
+
+    def _select_text_model(
+        self,
+        prompt: PromptResult | str,
+        *,
+        model: str | None,
+        runtime_kwargs: dict[str, Any],
+    ) -> str:
+        prompt_model = self._get_prompt_attr(prompt, "model")
+        return prompt_model or model or runtime_kwargs.get("model") or self._model
+
+    @staticmethod
+    def _get_prompt_attr(prompt: PromptResult | str, name: str) -> Any:
+        if isinstance(prompt, str):
+            return None
+        return getattr(prompt, name)
+
+    @staticmethod
+    def _strip_common_text_kwargs(runtime_kw: dict[str, Any]) -> None:
+        runtime_kw.pop("model", None)
+        runtime_kw.pop("temperature", None)
+        runtime_kw.pop("max_tokens", None)
