@@ -39,9 +39,20 @@ image_bytes, content_type = await gemini.generate_image_bytes(
     "A fantasy clan banner, game icon style.",
     response_mime_type="image/webp",
 )
+
+imagen_bytes, imagen_content_type = await gemini.generate_imagen_bytes(
+    "A fantasy clan banner, game icon style.",
+    response_mime_type="image/jpeg",
+)
 ```
 
 `answer(prompt)` remains available as a compatibility wrapper for text generation.
+
+`generate_image_bytes()` targets Gemini image models through `generate_content` and treats
+`response_mime_type` as a preferred/fallback MIME type. It does not pass image MIME values
+to Gemini's text `response_mime_type` config field. Use `generate_imagen_bytes()` for
+Imagen models; that path uses `generate_images` and passes the requested MIME as
+`output_mime_type`.
 
 ## Router Pipeline
 
@@ -70,7 +81,7 @@ response = await dispatcher.process("chat", text="Hello!")
 | Module | Extra | Description |
 | :--- | :--- | :--- |
 | `codex_ai.core` | - | Dispatcher, router, protocol types, sync wrapper, and shared exception contract |
-| `codex_ai.providers.gemini` | `[gemini]` | Google Gemini text, JSON, and image generation via `google-genai` |
+| `codex_ai.providers.gemini` | `[gemini]` | Google Gemini text, JSON, Gemini image, and Imagen generation via pinned `google-genai` |
 | `codex_ai.providers.openai` | `[openai]` | OpenAI Chat Completions text provider |
 
 ## Development

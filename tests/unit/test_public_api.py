@@ -20,6 +20,7 @@ def test_top_level_core_exports():
 
     assert hasattr(codex_ai, "LLMDispatcher")
     assert hasattr(codex_ai, "ImageGenerationProvider")
+    assert hasattr(codex_ai, "ImagenGenerationProvider")
     assert hasattr(codex_ai, "JsonGenerationProvider")
     assert hasattr(codex_ai, "LLMRouter")
     assert hasattr(codex_ai, "LLMMessage")

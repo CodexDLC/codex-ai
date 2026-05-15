@@ -8,6 +8,7 @@ LLMProviderProtocol — adapter contract for LLM backends (OpenAI, Gemini, etc.)
 TextGenerationProvider — optional adapter contract for direct text generation.
 JsonGenerationProvider — optional adapter contract for direct JSON generation.
 ImageGenerationProvider — optional adapter contract for binary image generation.
+ImagenGenerationProvider — optional adapter contract for Imagen image generation.
 PromptBuilder — type alias for async builder functions registered via LLMRouter.
 """
 
@@ -156,6 +157,38 @@ class ImageGenerationProvider(Protocol):
             prompt: Plain image-generation prompt.
             model: Optional image model override.
             response_mime_type: Requested/preferred image MIME type.
+            **kwargs: Extra provider-specific kwargs.
+
+        Returns:
+            Tuple of ``(image_bytes, content_type)``.
+        """
+        ...
+
+
+@runtime_checkable
+class ImagenGenerationProvider(Protocol):
+    """
+    Optional adapter contract for providers that expose Imagen image generation.
+
+    This is separate from ``ImageGenerationProvider`` because Gemini image models
+    and Imagen models use different SDK methods and MIME configuration fields.
+    """
+
+    async def generate_imagen_bytes(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        response_mime_type: str = "image/jpeg",
+        **kwargs: Any,
+    ) -> tuple[bytes, str]:
+        """
+        Generate an Imagen image and return raw bytes plus the actual content type.
+
+        Args:
+            prompt: Plain image-generation prompt.
+            model: Optional Imagen model override.
+            response_mime_type: Requested image MIME type passed to Imagen when supported.
             **kwargs: Extra provider-specific kwargs.
 
         Returns:

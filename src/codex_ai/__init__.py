@@ -2,6 +2,7 @@
 
 from codex_ai.core import (
     ImageGenerationProvider,
+    ImagenGenerationProvider,
     JsonGenerationProvider,
     LLMDispatcher,
     LLMMessage,
@@ -18,6 +19,7 @@ __all__ = [
     # Core
     "LLMDispatcher",
     "ImageGenerationProvider",
+    "ImagenGenerationProvider",
     "JsonGenerationProvider",
     "LLMMessage",
     "LLMProviderError",

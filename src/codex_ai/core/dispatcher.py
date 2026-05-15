@@ -14,6 +14,7 @@ from typing import Any
 
 from .protocol import (
     ImageGenerationProvider,
+    ImagenGenerationProvider,
     JsonGenerationProvider,
     LLMProviderProtocol,
     PromptResult,
@@ -110,6 +111,33 @@ class LLMDispatcher:
             )
 
         return await self._provider.generate_image_bytes(
+            prompt,
+            model=model,
+            response_mime_type=response_mime_type,
+            **kwargs,
+        )
+
+    async def generate_imagen_bytes(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        response_mime_type: str = "image/jpeg",
+        **kwargs: Any,
+    ) -> tuple[bytes, str]:
+        """
+        Generate Imagen bytes through a provider that supports Imagen generation.
+
+        This method is intentionally separate from ``generate_image_bytes()``
+        because Imagen uses ``generate_images`` and an image output MIME config.
+        """
+        if not isinstance(self._provider, ImagenGenerationProvider):
+            provider_name = type(self._provider).__name__
+            raise TypeError(
+                f"Provider {provider_name} does not support Imagen generation; expected generate_imagen_bytes(...)"
+            )
+
+        return await self._provider.generate_imagen_bytes(
             prompt,
             model=model,
             response_mime_type=response_mime_type,

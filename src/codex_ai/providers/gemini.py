@@ -8,6 +8,7 @@ Requires: ``pip install codex-ai[gemini]``
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any, cast
 
@@ -28,6 +29,7 @@ from codex_ai.core.protocol import PromptResult
 
 _DEFAULT_MODEL = "gemini-2.5-flash-lite"
 _DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
+_DEFAULT_IMAGEN_MODEL = "imagen-3.0-generate-002"
 
 
 class GeminiProvider:
@@ -52,13 +54,20 @@ class GeminiProvider:
         ```
     """
 
-    def __init__(self, api_key: str, model: str = _DEFAULT_MODEL, image_model: str = _DEFAULT_IMAGE_MODEL) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str = _DEFAULT_MODEL,
+        image_model: str = _DEFAULT_IMAGE_MODEL,
+        imagen_model: str = _DEFAULT_IMAGEN_MODEL,
+    ) -> None:
         self._client = genai.Client(
             api_key=api_key,
             http_options=genai_types.HttpOptions(api_version="v1alpha"),
         )
         self._model = model
         self._image_model = image_model
+        self._imagen_model = imagen_model
 
     async def answer(self, prompt: PromptResult, **kw: Any) -> str:
         """
@@ -180,10 +189,16 @@ class GeminiProvider:
         **kwargs: Any,
     ) -> tuple[bytes, str]:
         """
-        Generate an image with Gemini and return raw bytes plus content type.
+        Generate an image with Gemini image models and return bytes plus content type.
 
-        ``response_mime_type`` is treated as the requested MIME type. The actual
-        MIME type returned by Gemini wins when present.
+        This uses the Gemini ``generate_content`` image path with
+        ``GenerateContentConfig.response_modalities=[IMAGE]``. Use it for Gemini
+        image preview / flash-image / nano-banana style models.
+
+        ``response_mime_type`` is a preferred/fallback MIME type only. Gemini's
+        ``GenerateContentConfig.response_mime_type`` accepts text response MIME
+        values, so image MIME values are not sent there. The actual MIME type
+        returned in ``inline_data.mime_type`` wins when present.
         """
         selected_model = model or self._image_model
         requested_mime = response_mime_type
@@ -194,7 +209,6 @@ class GeminiProvider:
 
         config = genai_types.GenerateContentConfig(
             response_modalities=[genai_types.Modality.IMAGE],
-            response_mime_type=requested_mime,
             **runtime_kw,
         )
 
@@ -215,6 +229,52 @@ class GeminiProvider:
         except Exception as exc:
             raise LLMProviderError(f"Gemini image generation error: {exc}") from exc
 
+    async def generate_imagen_bytes(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        response_mime_type: str = "image/jpeg",
+        **kwargs: Any,
+    ) -> tuple[bytes, str]:
+        """
+        Generate an image with Imagen models and return bytes plus content type.
+
+        This uses the Imagen ``generate_images`` SDK path and passes
+        ``response_mime_type`` as ``GenerateImagesConfig.output_mime_type``.
+        Use it for ``imagen-*`` models, not Gemini flash-image / nano-banana
+        models.
+        """
+        selected_model = model or self._imagen_model
+        requested_mime = response_mime_type
+
+        runtime_kw = kwargs.copy()
+        runtime_kw.pop("model", None)
+        runtime_kw.pop("response_mime_type", None)
+        runtime_kw.pop("output_mime_type", None)
+
+        config = genai_types.GenerateImagesConfig(
+            output_mime_type=requested_mime,
+            **runtime_kw,
+        )
+
+        try:
+            response = await self._client.aio.models.generate_images(
+                model=selected_model,
+                prompt=prompt,
+                config=config,
+            )
+            image = self._extract_first_imagen_image(response, fallback_mime=requested_mime)
+            if image is not None:
+                return image
+
+            detail = self._describe_imagen_non_image_response(response)
+            raise LLMProviderError(f"Gemini Imagen generation did not return image data{detail}")
+        except LLMProviderError:
+            raise
+        except Exception as exc:
+            raise LLMProviderError(f"Gemini Imagen generation error: {exc}") from exc
+
     @staticmethod
     def _extract_first_inline_image(response: Any, *, fallback_mime: str) -> tuple[bytes, str] | None:
         for part in GeminiProvider._iter_response_parts(response):
@@ -227,6 +287,45 @@ class GeminiProvider:
             return bytes(data), mime_type
 
         return None
+
+    @staticmethod
+    def _extract_first_imagen_image(response: Any, *, fallback_mime: str) -> tuple[bytes, str] | None:
+        for generated_image in getattr(response, "generated_images", None) or []:
+            image = getattr(generated_image, "image", None)
+            if image is None:
+                continue
+
+            data = getattr(image, "image_bytes", None)
+            if data is None:
+                data = getattr(image, "data", None)
+            if data is None:
+                continue
+
+            image_bytes = base64.b64decode(data) if isinstance(data, str) else bytes(data)
+
+            mime_type = getattr(image, "mime_type", None) or getattr(generated_image, "mime_type", None)
+            mime_type = mime_type or fallback_mime
+            return image_bytes, mime_type
+
+        return None
+
+    @staticmethod
+    def _describe_imagen_non_image_response(response: Any) -> str:
+        details: list[str] = []
+
+        for generated_image in getattr(response, "generated_images", None) or []:
+            rai_reason = getattr(generated_image, "rai_filtered_reason", None)
+            if rai_reason:
+                details.append(f"rai_filtered_reason={rai_reason}")
+
+            safety_attributes = getattr(generated_image, "safety_attributes", None)
+            if safety_attributes:
+                details.append(f"safety_attributes={safety_attributes}")
+
+        if not details:
+            return ""
+
+        return f": {'; '.join(details)}"
 
     @staticmethod
     def _describe_non_image_response(response: Any) -> str:

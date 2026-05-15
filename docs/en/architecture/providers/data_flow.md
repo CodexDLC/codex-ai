@@ -33,6 +33,18 @@ prompt: str
     -> (bytes, actual_mime_type)
 ```
 
+`response_mime_type` is not passed to `GenerateContentConfig.response_mime_type` on this path; it is only a fallback content type when Gemini omits `inline_data.mime_type`.
+
+## Imagen Images
+
+```
+prompt: str
+    -> GeminiProvider.generate_imagen_bytes()
+    -> GenerateImagesConfig(output_mime_type=requested_mime)
+    -> first generated_images image
+    -> (bytes, actual_mime_type)
+```
+
 ## OpenAI Text
 
 ```

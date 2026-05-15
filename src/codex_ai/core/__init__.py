@@ -8,6 +8,7 @@ from .dispatcher import LLMDispatcher
 from .exceptions import LLMProviderError
 from .protocol import (
     ImageGenerationProvider,
+    ImagenGenerationProvider,
     JsonGenerationProvider,
     LLMMessage,
     LLMProviderProtocol,
@@ -22,6 +23,7 @@ __all__ = [
     "LLMDispatcher",
     "LLMProviderError",
     "ImageGenerationProvider",
+    "ImagenGenerationProvider",
     "JsonGenerationProvider",
     "LLMMessage",
     "LLMProviderProtocol",

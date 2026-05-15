@@ -10,6 +10,7 @@ Gemini является основным направлением и дает п
 await gemini.generate_text(...)
 await gemini.generate_json(...)
 await gemini.generate_image_bytes(...)
+await gemini.generate_imagen_bytes(...)
 ```
 
 OpenAI оставлен как текстовый провайдер с `generate_text(...)`.
@@ -22,6 +23,7 @@ PromptResult/String
       ├── GeminiProvider.generate_text(...)        -> str
       ├── GeminiProvider.generate_json(...)        -> dict | BaseModel
       ├── GeminiProvider.generate_image_bytes(...) -> tuple[bytes, str]
+      ├── GeminiProvider.generate_imagen_bytes(...) -> tuple[bytes, str]
       └── OpenAIProvider.generate_text(...)        -> str
 ```
 
@@ -44,5 +46,7 @@ LLMRouter builder -> PromptResult -> LLMDispatcher.process() -> provider.answer(
 
 - Возможности Gemini представлены напрямую, без широкой универсальной абстракции.
 - JSON generation использует native JSON config провайдера и локальную проверку через `json.loads` и optional Pydantic schema.
-- Image generation возвращает raw bytes и фактический MIME type от Gemini.
+- Gemini image generation и Imagen generation разведены в отдельные явные методы, потому что они используют разные SDK calls.
+- `generate_image_bytes()` использует Gemini `generate_content` с image modality. Его `response_mime_type` является только preferred/fallback MIME type.
+- `generate_imagen_bytes()` использует Imagen `generate_images` и передает requested MIME как `output_mime_type`.
 - Anthropic, OpenRouter и multi-provider failover не являются активными API в этой alpha-линейке.

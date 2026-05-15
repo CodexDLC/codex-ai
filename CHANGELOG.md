@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-15
+
+### Added
+- Added explicit `GeminiProvider.generate_imagen_bytes()` for Imagen models through `generate_images`.
+- Added `ImagenGenerationProvider` and dispatcher delegation for explicit Imagen generation.
+
+### Fixed
+- Stopped passing image MIME values such as `image/webp` into Gemini `GenerateContentConfig.response_mime_type` on the Gemini image path.
+- Pinned `google-genai` to `1.68.0` to avoid accidental SDK API drift in the alpha image-generation contract.
+
 ## [0.2.0] - 2026-05-15
 
 ### Added
