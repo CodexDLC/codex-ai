@@ -1,11 +1,12 @@
 """Tests for GeminiProvider."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from codex_ai.core.exceptions import LLMProviderError
-from codex_ai.core.protocol import LLMMessage, LLMProviderProtocol, PromptResult
+from codex_ai.core.protocol import ImageGenerationProvider, LLMMessage, LLMProviderProtocol, PromptResult
 from codex_ai.providers.gemini import GeminiProvider
 
 
@@ -32,6 +33,12 @@ def test_gemini_provider_satisfies_protocol():
     with patch("codex_ai.providers.gemini.genai_types"):
         provider = GeminiProvider(api_key="x")
     assert isinstance(provider, LLMProviderProtocol)
+
+
+def test_gemini_provider_satisfies_image_generation_protocol():
+    with patch("codex_ai.providers.gemini.genai_types"):
+        provider = GeminiProvider(api_key="x")
+    assert isinstance(provider, ImageGenerationProvider)
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +185,20 @@ async def test_gemini_model_falls_back_to_instance_default():
     assert kwargs["model"] == "gemini-2.5-flash-lite"
 
 
+async def test_gemini_answer_uses_text_model_not_image_model():
+    provider, mock_generate, _ = _make_provider()
+    provider._model = "text-model"
+    provider._image_model = "image-model"
+    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        await provider.answer(prompt)
+
+    _, kwargs = mock_generate.call_args
+    assert kwargs["model"] == "text-model"
+
+
 # ---------------------------------------------------------------------------
 # Return value handling
 # ---------------------------------------------------------------------------
@@ -233,5 +254,137 @@ async def test_gemini_provider_error_chains_original():
         mock_types.GenerateContentConfig.return_value = MagicMock()
         with pytest.raises(LLMProviderError) as exc_info:
             await provider.answer(prompt)
+
+    assert exc_info.value.__cause__ is original
+
+
+# ---------------------------------------------------------------------------
+# Image generation
+# ---------------------------------------------------------------------------
+
+
+def _image_response(data: bytes | bytearray = b"image", mime_type: str | None = "image/png") -> SimpleNamespace:
+    inline_data = SimpleNamespace(data=data, mime_type=mime_type)
+    part = SimpleNamespace(inline_data=inline_data, text=None)
+    return SimpleNamespace(parts=[part], text=None)
+
+
+async def test_gemini_generate_image_bytes_uses_image_model_not_text_model():
+    provider, mock_generate, _ = _make_provider()
+    provider._model = "text-model"
+    provider._image_model = "image-model"
+    mock_generate.return_value = _image_response()
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        await provider.generate_image_bytes("draw a castle")
+
+    _, kwargs = mock_generate.call_args
+    assert kwargs["model"] == "image-model"
+    assert kwargs["contents"] == "draw a castle"
+
+
+async def test_gemini_generate_image_bytes_model_override_wins():
+    provider, mock_generate, _ = _make_provider()
+    provider._image_model = "image-model"
+    mock_generate.return_value = _image_response()
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        await provider.generate_image_bytes("draw a castle", model="explicit-image-model")
+
+    _, kwargs = mock_generate.call_args
+    assert kwargs["model"] == "explicit-image-model"
+
+
+async def test_gemini_generate_image_bytes_config_requests_image_modality_and_mime():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = _image_response()
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        await provider.generate_image_bytes("draw a castle", response_mime_type="image/webp", seed=7)
+
+    config_kwargs = mock_types.GenerateContentConfig.call_args.kwargs
+    assert config_kwargs["response_modalities"] == ["IMAGE"]
+    assert config_kwargs["response_mime_type"] == "image/webp"
+    assert config_kwargs["seed"] == 7
+
+
+async def test_gemini_generate_image_bytes_returns_inline_image_bytes_and_actual_mime():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = _image_response(data=b"png-bytes", mime_type="image/png")
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        result = await provider.generate_image_bytes("draw a castle", response_mime_type="image/webp")
+
+    assert result == (b"png-bytes", "image/png")
+
+
+async def test_gemini_generate_image_bytes_falls_back_to_requested_mime_when_missing():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = _image_response(data=bytearray(b"webp-bytes"), mime_type=None)
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        result = await provider.generate_image_bytes("draw a castle", response_mime_type="image/webp")
+
+    assert result == (b"webp-bytes", "image/webp")
+
+
+async def test_gemini_generate_image_bytes_raises_when_no_image_parts():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = SimpleNamespace(parts=[SimpleNamespace(text="no image", inline_data=None)], text=None)
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        with pytest.raises(LLMProviderError, match="did not return image data"):
+            await provider.generate_image_bytes("draw a castle")
+
+
+async def test_gemini_generate_image_bytes_includes_text_diagnostic_for_text_only_response():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = SimpleNamespace(parts=[], text="blocked by safety policy")
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        with pytest.raises(LLMProviderError, match="blocked by safety policy"):
+            await provider.generate_image_bytes("draw a castle")
+
+
+async def test_gemini_generate_image_bytes_includes_block_diagnostic():
+    provider, mock_generate, _ = _make_provider()
+    candidate = SimpleNamespace(
+        content=SimpleNamespace(parts=[]),
+        finish_reason="SAFETY",
+        safety_ratings=["blocked"],
+    )
+    mock_generate.return_value = SimpleNamespace(parts=[], text=None, candidates=[candidate])
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        with pytest.raises(LLMProviderError, match="finish_reason=SAFETY"):
+            await provider.generate_image_bytes("draw a castle")
+
+
+async def test_gemini_generate_image_bytes_wraps_sdk_errors():
+    provider, mock_generate, _ = _make_provider()
+    original = RuntimeError("quota exceeded")
+    mock_generate.side_effect = original
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        with pytest.raises(LLMProviderError, match="Gemini image generation error") as exc_info:
+            await provider.generate_image_bytes("draw a castle")
 
     assert exc_info.value.__cause__ is original

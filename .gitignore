@@ -191,6 +191,7 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 .uv-cache/
+graphify-out/
 
 # PyPI configuration file
 .pypirc

@@ -110,3 +110,50 @@ async def test_dispatcher_include_router_overwrites_duplicate_mode(mock_provider
 
     await dispatcher.process("chat")
     assert called == ["b"]
+
+
+class ImageProvider:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def answer(self, prompt: PromptResult, **kw) -> str:
+        msg = "text fallback should not be used for image generation"
+        raise AssertionError(msg)
+
+    async def generate_image_bytes(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        response_mime_type: str = "image/webp",
+        **kwargs,
+    ) -> tuple[bytes, str]:
+        self.calls.append((prompt, model, response_mime_type, kwargs))
+        return b"image-bytes", "image/png"
+
+
+async def test_dispatcher_generate_image_bytes_delegates_to_image_provider():
+    provider = ImageProvider()
+    dispatcher = LLMDispatcher(provider=provider)
+
+    result = await dispatcher.generate_image_bytes(
+        "draw a castle",
+        model="gemini-image",
+        response_mime_type="image/webp",
+        seed=123,
+    )
+
+    assert result == (b"image-bytes", "image/png")
+    assert provider.calls == [("draw a castle", "gemini-image", "image/webp", {"seed": 123})]
+
+
+async def test_dispatcher_generate_image_bytes_raises_for_unsupported_provider(mock_provider):
+    dispatcher = LLMDispatcher(provider=mock_provider)
+
+    with pytest.raises(
+        TypeError,
+        match=r"Provider MockProvider does not support image generation; expected generate_image_bytes\(\.\.\.\)",
+    ):
+        await dispatcher.generate_image_bytes("draw a castle")
+
+    assert mock_provider.calls == []

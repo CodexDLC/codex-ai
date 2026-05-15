@@ -37,6 +37,7 @@ def test_top_level_core_exports():
     import codex_ai
 
     assert hasattr(codex_ai, "LLMDispatcher")
+    assert hasattr(codex_ai, "ImageGenerationProvider")
     assert hasattr(codex_ai, "LLMRouter")
     assert hasattr(codex_ai, "LLMMessage")
     assert hasattr(codex_ai, "PromptResult")

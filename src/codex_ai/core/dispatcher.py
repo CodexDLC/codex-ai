@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .protocol import LLMProviderProtocol, PromptResult
+from .protocol import ImageGenerationProvider, LLMProviderProtocol, PromptResult
 from .router import LLMRouter
 
 log = logging.getLogger(__name__)
@@ -82,3 +82,31 @@ class LLMDispatcher:
         log.debug(f"LLMDispatcher | calling builder '{builder.__name__}' for mode='{mode}'")
         prompt: PromptResult = await builder(**kw)
         return await self._provider.answer(prompt, **kw)
+
+    async def generate_image_bytes(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        response_mime_type: str = "image/webp",
+        **kwargs: Any,
+    ) -> tuple[bytes, str]:
+        """
+        Generate image bytes through a provider that supports image generation.
+
+        This method does not use prompt routers and never falls back to the text
+        ``answer()`` contract.
+        """
+        if not isinstance(self._provider, ImageGenerationProvider):
+            provider_name = type(self._provider).__name__
+            raise TypeError(
+                f"Provider {provider_name} does not support image generation; "
+                "expected generate_image_bytes(...)"
+            )
+
+        return await self._provider.generate_image_bytes(
+            prompt,
+            model=model,
+            response_mime_type=response_mime_type,
+            **kwargs,
+        )

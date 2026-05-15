@@ -5,6 +5,7 @@ Core types and contracts for the LLM abstraction layer.
 
 PromptResult — frozen DTO returned by every prompt builder.
 LLMProviderProtocol — adapter contract for LLM backends (OpenAI, Gemini, etc.).
+ImageGenerationProvider — optional adapter contract for binary image generation.
 PromptBuilder — type alias for async builder functions registered via LLMRouter.
 """
 
@@ -86,6 +87,38 @@ class LLMProviderProtocol(Protocol):
 
         Returns:
             Response text from the LLM.
+        """
+        ...
+
+
+@runtime_checkable
+class ImageGenerationProvider(Protocol):
+    """
+    Optional adapter contract for providers that can generate image bytes.
+
+    This is intentionally separate from ``LLMProviderProtocol.answer()`` because
+    image generation returns binary parts, not text.
+    """
+
+    async def generate_image_bytes(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        response_mime_type: str = "image/webp",
+        **kwargs: Any,
+    ) -> tuple[bytes, str]:
+        """
+        Generate an image and return raw bytes plus the actual content type.
+
+        Args:
+            prompt: Plain image-generation prompt.
+            model: Optional image model override.
+            response_mime_type: Requested/preferred image MIME type.
+            **kwargs: Extra provider-specific kwargs.
+
+        Returns:
+            Tuple of ``(image_bytes, content_type)``.
         """
         ...
 

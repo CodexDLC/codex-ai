@@ -1,6 +1,7 @@
 """codex-ai: Agnostic LLM abstraction layer (OpenAI, Gemini, Anthropic)."""
 
 from codex_ai.core import (
+    ImageGenerationProvider,
     LLMDispatcher,
     LLMMessage,
     LLMProviderError,
@@ -14,6 +15,7 @@ from codex_ai.core import (
 __all__ = [
     # Core
     "LLMDispatcher",
+    "ImageGenerationProvider",
     "LLMMessage",
     "LLMProviderError",
     "LLMProviderProtocol",

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from codex_ai.core.protocol import LLMMessage, LLMProviderProtocol, PromptResult
+from codex_ai.core.protocol import ImageGenerationProvider, LLMMessage, LLMProviderProtocol, PromptResult
 
 # ---------------------------------------------------------------------------
 # LLMMessage
@@ -83,3 +83,27 @@ def test_runtime_checkable_does_not_verify_async():
 
     # This is the documented limitation: sync method still passes the check.
     assert isinstance(SyncAnswer(), LLMProviderProtocol)
+
+
+# ---------------------------------------------------------------------------
+# ImageGenerationProvider structural checks
+# ---------------------------------------------------------------------------
+
+
+def test_image_generation_provider_structural_check():
+    class MockImageProvider:
+        async def generate_image_bytes(
+            self,
+            prompt: str,
+            *,
+            model: str | None = None,
+            response_mime_type: str = "image/webp",
+            **kwargs,
+        ) -> tuple[bytes, str]:
+            return b"image", response_mime_type
+
+    assert isinstance(MockImageProvider(), ImageGenerationProvider)
+
+
+def test_object_without_generate_image_bytes_fails_image_provider_check():
+    assert not isinstance(object(), ImageGenerationProvider)
