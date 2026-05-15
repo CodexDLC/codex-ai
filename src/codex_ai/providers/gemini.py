@@ -28,7 +28,7 @@ from codex_ai.core.exceptions import LLMProviderError
 from codex_ai.core.protocol import PromptResult
 
 _DEFAULT_MODEL = "gemini-2.5-flash-lite"
-_DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
+_DEFAULT_IMAGE_MODEL = "gemini-2.5-flash-image"
 _DEFAULT_IMAGEN_MODEL = "imagen-3.0-generate-002"
 
 
@@ -41,7 +41,7 @@ class GeminiProvider:
     Args:
         api_key: Google AI API key.
         model: Gemini text model name. Defaults to ``"gemini-2.5-flash-lite"``.
-        image_model: Gemini image model name. Defaults to ``"gemini-3.1-flash-image-preview"``.
+        image_model: Gemini image model name. Defaults to ``"gemini-2.5-flash-image"``.
 
     Example:
         ```python

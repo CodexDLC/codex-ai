@@ -384,6 +384,19 @@ async def test_gemini_generate_image_bytes_uses_image_model_not_text_model():
     assert kwargs["contents"] == "draw a castle"
 
 
+async def test_gemini_generate_image_bytes_default_image_model_matches_api_id():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = _image_response()
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        await provider.generate_image_bytes("draw a castle")
+
+    _, kwargs = mock_generate.call_args
+    assert kwargs["model"] == "gemini-2.5-flash-image"
+
+
 async def test_gemini_generate_image_bytes_model_override_wins():
     provider, mock_generate, _ = _make_provider()
     provider._image_model = "image-model"

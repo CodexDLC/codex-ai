@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-05-15
+
+### Fixed
+- Changed the Gemini image default model to the official API model id `gemini-2.5-flash-image`.
+
 ## [0.2.1] - 2026-05-15
 
 ### Added

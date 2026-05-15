@@ -37,6 +37,7 @@ text = await gemini.generate_text("Write one short tavern rumor.")
 loot = await gemini.generate_json("Create one loot item.", schema=LootItem)
 image_bytes, content_type = await gemini.generate_image_bytes(
     "A fantasy clan banner, game icon style.",
+    model="gemini-2.5-flash-image",
     response_mime_type="image/webp",
 )
 
