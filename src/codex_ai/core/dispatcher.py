@@ -96,6 +96,7 @@ class LLMDispatcher:
         *,
         model: str | None = None,
         response_mime_type: str = "image/webp",
+        image_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> tuple[bytes, str]:
         """
@@ -114,6 +115,7 @@ class LLMDispatcher:
             prompt,
             model=model,
             response_mime_type=response_mime_type,
+            image_config=image_config,
             **kwargs,
         )
 

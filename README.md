@@ -36,9 +36,10 @@ gemini = GeminiProvider(api_key="AIza...")
 text = await gemini.generate_text("Write one short tavern rumor.")
 loot = await gemini.generate_json("Create one loot item.", schema=LootItem)
 image_bytes, content_type = await gemini.generate_image_bytes(
-    "A fantasy clan banner, game icon style.",
-    model="gemini-2.5-flash-image",
-    response_mime_type="image/webp",
+    "Square tactical dark fantasy ruined capital city map, no labels.",
+    model="gemini-3-pro-image-preview",
+    response_mime_type="image/png",
+    image_config={"aspect_ratio": "1:1", "image_size": "4K"},
 )
 
 imagen_bytes, imagen_content_type = await gemini.generate_imagen_bytes(
@@ -51,7 +52,9 @@ imagen_bytes, imagen_content_type = await gemini.generate_imagen_bytes(
 
 `generate_image_bytes()` targets Gemini image models through `generate_content` and treats
 `response_mime_type` as a preferred/fallback MIME type. It does not pass image MIME values
-to Gemini's text `response_mime_type` config field. Use `generate_imagen_bytes()` for
+to Gemini's text `response_mime_type` config field. Pass Gemini image controls such as
+`aspect_ratio` and `image_size` with `image_config`; if a `4K` request is rejected,
+the Gemini provider retries once with `2K`. Use `generate_imagen_bytes()` for
 Imagen models; that path uses `generate_images` and passes the requested MIME as
 `output_mime_type`.
 

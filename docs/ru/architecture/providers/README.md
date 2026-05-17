@@ -47,6 +47,7 @@ LLMRouter builder -> PromptResult -> LLMDispatcher.process() -> provider.answer(
 - Возможности Gemini представлены напрямую, без широкой универсальной абстракции.
 - JSON generation использует native JSON config провайдера и локальную проверку через `json.loads` и optional Pydantic schema.
 - Gemini image generation и Imagen generation разведены в отдельные явные методы, потому что они используют разные SDK calls.
-- `generate_image_bytes()` использует Gemini `generate_content` с image modality. Его `response_mime_type` является только preferred/fallback MIME type.
+- `generate_image_bytes()` использует Gemini `generate_content` с image modality. Его `response_mime_type` является только preferred/fallback MIME type, а Gemini image controls передаются через `image_config`.
+- `generate_image_bytes()` один раз повторяет отклоненный `image_config={"image_size": "4K"}` запрос как `2K`.
 - `generate_imagen_bytes()` использует Imagen `generate_images` и передает requested MIME как `output_mime_type`.
 - Anthropic, OpenRouter и multi-provider failover не являются активными API в этой alpha-линейке.

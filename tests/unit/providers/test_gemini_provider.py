@@ -418,12 +418,41 @@ async def test_gemini_generate_image_bytes_config_requests_image_modality_not_te
     with patch("codex_ai.providers.gemini.genai_types") as mock_types:
         mock_types.Modality.IMAGE = "IMAGE"
         mock_types.GenerateContentConfig.return_value = MagicMock()
-        await provider.generate_image_bytes("draw a castle", response_mime_type="image/webp", seed=7)
+        await provider.generate_image_bytes(
+            "draw a castle",
+            response_mime_type="image/png",
+            image_config={"aspect_ratio": "1:1", "image_size": "4K"},
+            seed=7,
+        )
 
     config_kwargs = mock_types.GenerateContentConfig.call_args.kwargs
     assert config_kwargs["response_modalities"] == ["IMAGE"]
     assert "response_mime_type" not in config_kwargs
+    assert config_kwargs["image_config"] == {"aspect_ratio": "1:1", "image_size": "4K"}
     assert config_kwargs["seed"] == 7
+
+
+async def test_gemini_generate_image_bytes_falls_back_from_4k_to_2k_when_config_rejected():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.side_effect = [
+        ValueError("unsupported image_size"),
+        _image_response(data=b"png", mime_type="image/png"),
+    ]
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.side_effect = lambda **kwargs: kwargs
+        result = await provider.generate_image_bytes(
+            "draw a castle",
+            response_mime_type="image/png",
+            image_config={"aspect_ratio": "1:1", "image_size": "4K"},
+        )
+
+    assert result == (b"png", "image/png")
+    first_config = mock_generate.call_args_list[0].kwargs["config"]
+    second_config = mock_generate.call_args_list[1].kwargs["config"]
+    assert first_config["image_config"] == {"aspect_ratio": "1:1", "image_size": "4K"}
+    assert second_config["image_config"] == {"aspect_ratio": "1:1", "image_size": "2K"}
 
 
 async def test_gemini_generate_image_bytes_returns_inline_image_bytes_and_actual_mime():

@@ -148,6 +148,7 @@ class ImageGenerationProvider(Protocol):
         *,
         model: str | None = None,
         response_mime_type: str = "image/webp",
+        image_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> tuple[bytes, str]:
         """
@@ -157,6 +158,8 @@ class ImageGenerationProvider(Protocol):
             prompt: Plain image-generation prompt.
             model: Optional image model override.
             response_mime_type: Requested/preferred image MIME type.
+            image_config: Optional image generation controls such as
+                ``{"aspect_ratio": "1:1", "image_size": "4K"}``.
             **kwargs: Extra provider-specific kwargs.
 
         Returns:

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-05-17
+
+### Added
+- Added explicit Gemini image `image_config` support for aspect ratio and image size controls.
+- Added a Gemini image retry from `image_size="4K"` to `image_size="2K"` when the initial 4K request is rejected.
+
+### Changed
+- Updated the Gemini extra to `google-genai==2.3.0` for the SDK image configuration contract.
+
 ## [0.2.2] - 2026-05-15
 
 ### Fixed

@@ -106,6 +106,7 @@ def test_image_generation_provider_structural_check():
             *,
             model: str | None = None,
             response_mime_type: str = "image/webp",
+            image_config: dict | None = None,
             **kwargs,
         ) -> tuple[bytes, str]:
             return b"image", response_mime_type

@@ -126,9 +126,10 @@ class ImageProvider:
         *,
         model: str | None = None,
         response_mime_type: str = "image/webp",
+        image_config: dict | None = None,
         **kwargs,
     ) -> tuple[bytes, str]:
-        self.calls.append((prompt, model, response_mime_type, kwargs))
+        self.calls.append((prompt, model, response_mime_type, image_config, kwargs))
         return b"image-bytes", "image/png"
 
     async def generate_imagen_bytes(
@@ -159,11 +160,14 @@ async def test_dispatcher_generate_image_bytes_delegates_to_image_provider():
         "draw a castle",
         model="gemini-image",
         response_mime_type="image/webp",
+        image_config={"aspect_ratio": "1:1", "image_size": "4K"},
         seed=123,
     )
 
     assert result == (b"image-bytes", "image/png")
-    assert provider.calls == [("draw a castle", "gemini-image", "image/webp", {"seed": 123})]
+    assert provider.calls == [
+        ("draw a castle", "gemini-image", "image/webp", {"aspect_ratio": "1:1", "image_size": "4K"}, {"seed": 123})
+    ]
 
 
 async def test_dispatcher_generate_image_bytes_raises_for_unsupported_provider(mock_provider):

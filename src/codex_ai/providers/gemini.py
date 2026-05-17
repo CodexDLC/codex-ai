@@ -186,6 +186,7 @@ class GeminiProvider:
         *,
         model: str | None = None,
         response_mime_type: str = "image/webp",
+        image_config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> tuple[bytes, str]:
         """
@@ -206,28 +207,74 @@ class GeminiProvider:
         runtime_kw = kwargs.copy()
         runtime_kw.pop("model", None)
         runtime_kw.pop("response_mime_type", None)
+        runtime_kw.pop("image_config", None)
 
-        config = genai_types.GenerateContentConfig(
-            response_modalities=[genai_types.Modality.IMAGE],
+        config_kwargs: dict[str, Any] = {
+            "response_modalities": [genai_types.Modality.IMAGE],
             **runtime_kw,
-        )
+        }
+        if image_config is not None:
+            config_kwargs["image_config"] = image_config
 
         try:
-            response = await self._client.aio.models.generate_content(
+            return await self._generate_image_once(
                 model=selected_model,
-                contents=prompt,
-                config=config,
+                prompt=prompt,
+                config_kwargs=config_kwargs,
+                fallback_mime=requested_mime,
             )
-            image = self._extract_first_inline_image(response, fallback_mime=requested_mime)
-            if image is not None:
-                return image
-
-            detail = self._describe_non_image_response(response)
-            raise LLMProviderError(f"Gemini image generation did not return image data{detail}")
         except LLMProviderError:
             raise
         except Exception as exc:
+            fallback_config_kwargs = self._fallback_4k_image_config_to_2k(config_kwargs)
+            if fallback_config_kwargs is not None:
+                try:
+                    return await self._generate_image_once(
+                        model=selected_model,
+                        prompt=prompt,
+                        config_kwargs=fallback_config_kwargs,
+                        fallback_mime=requested_mime,
+                    )
+                except LLMProviderError:
+                    raise
+                except Exception as fallback_exc:
+                    raise LLMProviderError(f"Gemini image generation error: {fallback_exc}") from fallback_exc
+
             raise LLMProviderError(f"Gemini image generation error: {exc}") from exc
+
+    async def _generate_image_once(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        config_kwargs: dict[str, Any],
+        fallback_mime: str,
+    ) -> tuple[bytes, str]:
+        config = genai_types.GenerateContentConfig(**config_kwargs)
+        response = await self._client.aio.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=config,
+        )
+        image = self._extract_first_inline_image(response, fallback_mime=fallback_mime)
+        if image is not None:
+            return image
+
+        detail = self._describe_non_image_response(response)
+        raise LLMProviderError(f"Gemini image generation did not return image data{detail}")
+
+    @staticmethod
+    def _fallback_4k_image_config_to_2k(config_kwargs: dict[str, Any]) -> dict[str, Any] | None:
+        image_config = config_kwargs.get("image_config")
+        if not isinstance(image_config, dict) or image_config.get("image_size") != "4K":
+            return None
+
+        fallback_image_config = image_config.copy()
+        fallback_image_config["image_size"] = "2K"
+
+        fallback_config_kwargs = config_kwargs.copy()
+        fallback_config_kwargs["image_config"] = fallback_image_config
+        return fallback_config_kwargs
 
     async def generate_imagen_bytes(
         self,
