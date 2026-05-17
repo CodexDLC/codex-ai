@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`codex_ai.providers` contains concrete provider adapters for the APIs currently supported by the library: Gemini and OpenAI.
+`codex_ai.providers` contains concrete SDK adapters, not a broad interchangeable provider framework. Gemini is the product focus; OpenAI is retained only for text generation.
 
 Gemini is the primary target and exposes direct methods for text, JSON, and image generation:
 
@@ -13,7 +13,7 @@ await gemini.generate_image_bytes(...)
 await gemini.generate_imagen_bytes(...)
 ```
 
-OpenAI is kept as a text provider with the same `generate_text(...)` convenience.
+OpenAI is kept as a text-only adapter with the same `generate_text(...)` convenience.
 
 ## Architecture
 
@@ -50,4 +50,4 @@ LLMRouter builder -> PromptResult -> LLMDispatcher.process() -> provider.answer(
 - `generate_image_bytes()` uses Gemini `generate_content` with image modality. Its `response_mime_type` is only a preferred/fallback MIME type, and Gemini image controls are passed through `image_config`.
 - `generate_image_bytes()` retries a rejected `image_config={"image_size": "4K"}` request once as `2K`.
 - `generate_imagen_bytes()` uses Imagen `generate_images` and passes the requested MIME as `output_mime_type`.
-- Anthropic, OpenRouter, and multi-provider failover are not active APIs in this alpha line.
+- Anthropic, OpenRouter, and multi-provider failover are not active APIs in this line.

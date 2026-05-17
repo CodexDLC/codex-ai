@@ -2,7 +2,7 @@
 
 ## Назначение
 
-`codex_ai.providers` содержит адаптеры для API, которые сейчас реально поддерживаются библиотекой: Gemini и OpenAI.
+`codex_ai.providers` содержит конкретные SDK-адаптеры, а не широкий interchangeable provider framework. Фокус продукта — Gemini; OpenAI сохранен только для текстовой генерации.
 
 Gemini является основным направлением и дает прямые методы для текста, JSON и картинок:
 
@@ -13,7 +13,7 @@ await gemini.generate_image_bytes(...)
 await gemini.generate_imagen_bytes(...)
 ```
 
-OpenAI оставлен как текстовый провайдер с `generate_text(...)`.
+OpenAI оставлен как text-only адаптер с `generate_text(...)`.
 
 ## Архитектура
 
@@ -50,4 +50,4 @@ LLMRouter builder -> PromptResult -> LLMDispatcher.process() -> provider.answer(
 - `generate_image_bytes()` использует Gemini `generate_content` с image modality. Его `response_mime_type` является только preferred/fallback MIME type, а Gemini image controls передаются через `image_config`.
 - `generate_image_bytes()` один раз повторяет отклоненный `image_config={"image_size": "4K"}` запрос как `2K`.
 - `generate_imagen_bytes()` использует Imagen `generate_images` и передает requested MIME как `output_mime_type`.
-- Anthropic, OpenRouter и multi-provider failover не являются активными API в этой alpha-линейке.
+- Anthropic, OpenRouter и multi-provider failover не являются активными API в этой линейке.

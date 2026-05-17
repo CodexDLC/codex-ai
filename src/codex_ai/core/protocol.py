@@ -1,10 +1,10 @@
 """
 codex_ai.core.protocol
 =======================
-Core types and contracts for the LLM abstraction layer.
+Core types and contracts for legacy text routing and direct provider helpers.
 
 PromptResult — frozen DTO returned by every prompt builder.
-LLMProviderProtocol — adapter contract for LLM backends (OpenAI, Gemini, etc.).
+LLMProviderProtocol — legacy text compatibility contract for ``answer()``.
 TextGenerationProvider — optional adapter contract for direct text generation.
 JsonGenerationProvider — optional adapter contract for direct JSON generation.
 ImageGenerationProvider — optional adapter contract for binary image generation.
@@ -39,11 +39,10 @@ class PromptResult(BaseDTO):
     """
     Frozen DTO produced by a prompt builder.
 
-    Passed directly to the LLM provider's ``answer()`` method.
+    Passed directly to the provider's legacy text ``answer()`` method.
 
     Attributes:
-        messages: Provider-specific message list (OpenAI ChatCompletionMessageParam format
-                  or Gemini contents). Each provider interprets this field as needed.
+        messages: Ordered text message list consumed by compatibility adapters.
         system: Optional system/developer instruction (top-level string, used by Gemini
                 and OpenAI o-series models that accept a dedicated system field).
 
@@ -68,9 +67,11 @@ class PromptResult(BaseDTO):
 @runtime_checkable
 class LLMProviderProtocol(Protocol):
     """
-    Adapter contract for LLM backends.
+    Legacy text adapter contract.
 
-    Implement this protocol to add a new provider (OpenAI, Gemini, Anthropic, etc.).
+    New Gemini integrations should prefer direct provider methods such as
+    ``generate_text()``, ``generate_json()``, and ``generate_image_bytes()``.
+    This protocol remains for router/dispatcher text compatibility.
 
     Example:
         ```python
@@ -82,14 +83,14 @@ class LLMProviderProtocol(Protocol):
 
     async def answer(self, prompt: PromptResult, **kw: Any) -> str:
         """
-        Send prompt to the LLM and return the response text.
+        Send a legacy text prompt and return the response text.
 
         Args:
             prompt: Frozen DTO with messages and system instruction.
             **kw: Extra provider-specific kwargs (temperature, max_tokens, etc.).
 
         Returns:
-            Response text from the LLM.
+            Response text from the provider.
         """
         ...
 

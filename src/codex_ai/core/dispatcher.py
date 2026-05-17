@@ -1,10 +1,10 @@
 """
 codex_ai.core.dispatcher
 =========================
-LLMDispatcher — orchestrates prompt building and LLM provider calls.
+LLMDispatcher — legacy text prompt dispatcher plus direct provider delegation.
 
 Registers routers, selects the correct builder by mode,
-and delegates response generation to the provider.
+and delegates text response generation to the provider's ``answer()`` method.
 """
 
 from __future__ import annotations
@@ -27,13 +27,14 @@ log = logging.getLogger(__name__)
 
 class LLMDispatcher:
     """
-    Orchestrates prompt building and LLM response generation.
+    Orchestrates legacy text prompt building and provider calls.
 
     Connects one or more LLMRouters, selects the builder by mode,
-    calls it with provided kwargs, then passes the result to the provider.
+    calls it with provided kwargs, then passes the result to the provider's
+    text compatibility ``answer()`` method.
 
     Args:
-        provider: LLM backend implementing LLMProviderProtocol.
+        provider: Text-compatible provider implementing LLMProviderProtocol.
 
     Example:
         ```python

@@ -1,7 +1,7 @@
 """
 codex_ai.providers.openai
 ==========================
-OpenAIProvider — LLM provider backed by OpenAI's Chat Completions API.
+OpenAIProvider — text-only adapter backed by OpenAI's Chat Completions API.
 
 Requires: ``pip install codex-ai[openai]``
 """
@@ -28,9 +28,10 @@ _DEFAULT_MODEL = "gpt-4o-mini"
 
 class OpenAIProvider:
     """
-    LLM provider using OpenAI Chat Completions.
+    Text-only adapter using OpenAI Chat Completions.
 
-    Implements LLMProviderProtocol.
+    Implements legacy text compatibility through ``answer()`` and direct
+    ``generate_text()`` convenience.
 
     Args:
         api_key: OpenAI API key.

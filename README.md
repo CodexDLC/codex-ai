@@ -2,10 +2,10 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/codex-ai.svg)](https://pypi.org/project/codex-ai/)
 [![Python](https://img.shields.io/pypi/pyversions/codex-ai.svg)](https://pypi.org/project/codex-ai/)
-[![CI](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml)
+[![CI](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/codexdlc/codex-ai/blob/main/LICENSE)
 
-Gemini-first and OpenAI provider helpers for the Codex ecosystem. The library keeps the legacy prompt router for text generation, and exposes direct provider methods for practical Gemini workflows.
+Gemini-first API helpers for the Codex ecosystem. The active surface is direct Gemini text, JSON, Gemini image, and Imagen generation. OpenAI remains as a small text-only adapter, and the router/dispatcher layer is kept for legacy text workflows.
 
 ## Install
 
@@ -58,7 +58,7 @@ the Gemini provider retries once with `2K`. Use `generate_imagen_bytes()` for
 Imagen models; that path uses `generate_images` and passes the requested MIME as
 `output_mime_type`.
 
-## Router Pipeline
+## Legacy Text Router
 
 ```python
 from codex_ai import GeminiProvider, LLMDispatcher, LLMMessage, LLMRouter, PromptResult
@@ -80,13 +80,17 @@ dispatcher.include_router(router)
 response = await dispatcher.process("chat", text="Hello!")
 ```
 
+Use this path only when you already have prompt builders registered through `LLMRouter`.
+New Gemini integrations should call `generate_text()`, `generate_json()`,
+`generate_image_bytes()`, or `generate_imagen_bytes()` directly.
+
 ## Modules
 
 | Module | Extra | Description |
 | :--- | :--- | :--- |
-| `codex_ai.core` | - | Dispatcher, router, protocol types, sync wrapper, and shared exception contract |
-| `codex_ai.providers.gemini` | `[gemini]` | Google Gemini text, JSON, Gemini image, and Imagen generation via pinned `google-genai` |
-| `codex_ai.providers.openai` | `[openai]` | OpenAI Chat Completions text provider |
+| `codex_ai.providers.gemini` | `[gemini]` | Primary API: Gemini text, JSON, Gemini image, and Imagen generation via pinned `google-genai` |
+| `codex_ai.providers.openai` | `[openai]` | Text-only OpenAI Chat Completions adapter |
+| `codex_ai.core` | - | Legacy text router/dispatcher contracts and shared provider exceptions |
 
 ## Development
 

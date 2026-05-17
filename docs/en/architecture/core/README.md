@@ -2,19 +2,22 @@
 
 ## Purpose
 
-`codex_ai.core` is the orchestration layer for LLM interactions. It decouples prompt construction from provider selection — prompt logic is defined once and can be routed to any backend without changes.
+`codex_ai.core` is the legacy text orchestration layer. It keeps existing `LLMRouter`/`LLMDispatcher` prompt-builder workflows working while the active API surface moves to direct provider methods.
 
 ## Why It's a Module
 
-Working directly with LLM SDKs across a codebase creates three recurring problems:
+Older Codex integrations use mode-based prompt builders. This module keeps that shape stable without making it the primary abstraction for new work:
 
-| Problem | What breaks |
-|---------|-------------|
-| Prompt logic scattered across call sites | Hard to test, review, or reuse |
-| Provider SDK calls coupled to business code | Switching providers requires touching every call |
-| No unified contract for async/sync contexts | Different wiring for Django views, ARQ workers, bots |
+| Need | Current role |
+|------|--------------|
+| Keep registered prompt builders working | `LLMRouter` maps modes to builders |
+| Run existing text flows without rewriting callers | `LLMDispatcher.process()` still calls `provider.answer()` |
+| Bridge sync-only contexts | `SyncLLMDispatcher` remains available for CLI/WSGI code |
 
-`core` solves these by introducing a clean pipeline:
+For new Gemini work, prefer `GeminiProvider.generate_text()`, `generate_json()`,
+`generate_image_bytes()`, and `generate_imagen_bytes()` directly.
+
+The retained text pipeline is:
 
 ```
 @router.prompt("mode") → PromptResult (frozen DTO) → LLMProviderProtocol.answer()
@@ -32,7 +35,7 @@ Working directly with LLM SDKs across a codebase creates three recurring problem
                      │ include_router(router)
                      ▼
           ┌──────────────────────┐
-          │    LLMDispatcher     │  orchestrates builder → provider
+          │    LLMDispatcher     │  legacy text builder → provider
           │                      │
           │  .process(mode, **kw)│
           └──────┬───────────────┘
@@ -52,19 +55,20 @@ Working directly with LLM SDKs across a codebase creates three recurring problem
 
 | Component | Class | Role |
 |-----------|-------|------|
-| `protocol.py` | `PromptResult` | Frozen DTO — immutable prompt passed to providers |
-| `protocol.py` | `LLMProviderProtocol` | Structural protocol — any class with `async answer()` qualifies |
+| `protocol.py` | `PromptResult` | Frozen DTO used by legacy text prompt builders |
+| `protocol.py` | `LLMProviderProtocol` | Structural text compatibility protocol for `answer()` |
 | `protocol.py` | `PromptBuilder` | Type alias for `async def (...) -> PromptResult` |
 | `router.py` | `LLMRouter` | Registry: maps `mode` strings to builder functions via decorator |
-| `dispatcher.py` | `LLMDispatcher` | Wires router + provider; single entry point for prompt execution |
+| `dispatcher.py` | `LLMDispatcher` | Runs legacy text prompts and delegates direct provider convenience methods |
 | `sync.py` | `SyncLLMDispatcher` | Wraps `LLMDispatcher` with `asyncio.run()` for WSGI/CLI contexts |
 | `exceptions.py` | `LLMProviderError` | Base exception raised by all provider implementations |
 
 ## Key Design Decisions
 
-- **Frozen DTO (`PromptResult`)** — built once by the builder, cannot be mutated downstream. Prevents accidental state sharing between requests.
-- **`@runtime_checkable` Protocol** — `isinstance(obj, LLMProviderProtocol)` works at runtime. No inheritance required from any base class.
-- **Mode-based dispatch** — `dispatcher.process("chat", ...)` maps to a registered builder. Adding a new prompt type never touches existing code.
+- **Direct provider APIs first** — Gemini capabilities are exposed as explicit methods instead of being forced through a universal provider interface.
+- **Frozen DTO (`PromptResult`)** — kept for legacy builders and cannot be mutated downstream.
+- **`@runtime_checkable` Protocol** — retained for runtime checks at compatibility boundaries.
+- **Mode-based dispatch is legacy text infrastructure** — `dispatcher.process("chat", ...)` maps to a registered builder for existing flows.
 - **All logs at `DEBUG`** — dispatcher emits only debug-level messages. Production log level controls visibility without code changes.
 - **`SyncLLMDispatcher` for Django only** — uses `asyncio.run()` which creates a new event loop. Never call from inside an async context (ARQ, async views, bots) — use `LLMDispatcher` directly.
 

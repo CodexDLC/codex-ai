@@ -1,7 +1,7 @@
 """
 codex_ai.providers.gemini
 ==========================
-GeminiProvider — LLM provider backed by Google Gemini (google-genai).
+GeminiProvider — Gemini-first direct API backed by google-genai.
 
 Requires: ``pip install codex-ai[gemini]``
 """
@@ -34,9 +34,10 @@ _DEFAULT_IMAGEN_MODEL = "imagen-3.0-generate-002"
 
 class GeminiProvider:
     """
-    LLM provider using Google Gemini via the google-genai SDK.
+    Direct Gemini adapter using the google-genai SDK.
 
-    Implements LLMProviderProtocol.
+    Implements legacy text compatibility through ``answer()`` and exposes
+    direct Gemini methods for text, JSON, Gemini image, and Imagen generation.
 
     Args:
         api_key: Google AI API key.

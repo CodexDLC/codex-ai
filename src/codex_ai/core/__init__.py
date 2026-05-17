@@ -1,7 +1,7 @@
 """
 codex_ai.core
 =============
-Core types, contracts, and dispatching logic for the LLM abstraction layer.
+Core legacy text router, dispatcher, and provider compatibility contracts.
 """
 
 from .dispatcher import LLMDispatcher

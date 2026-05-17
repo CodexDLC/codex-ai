@@ -2,19 +2,21 @@
 
 ## Назначение
 
-`codex_ai.core` — оркестрационный слой для работы с LLM. Разделяет построение промпта и выбор провайдера: логика промптов описывается один раз и может быть направлена к любому бэкенду без изменений.
+`codex_ai.core` — legacy-слой текстовой оркестрации. Он сохраняет существующие workflow на `LLMRouter`/`LLMDispatcher`, пока активная API-поверхность переехала в прямые методы провайдеров.
 
 ## Зачем это модуль
 
-Прямая работа с LLM SDK по всей кодовой базе создаёт три повторяющихся проблемы:
+Старые Codex-интеграции используют mode-based prompt builders. Этот модуль сохраняет такую форму, но больше не является основной абстракцией для новой работы:
 
-| Проблема | Что ломается |
-|----------|-------------|
-| Логика промптов разбросана по call site-ам | Трудно тестировать, ревьювить и переиспользовать |
-| Вызовы SDK провайдера связаны с бизнес-кодом | Смена провайдера требует правок в каждом вызове |
-| Нет единого контракта для async/sync контекстов | Разная обвязка для Django views, ARQ workers, ботов |
+| Потребность | Текущая роль |
+|-------------|--------------|
+| Сохранить зарегистрированные prompt builders | `LLMRouter` связывает modes с билдерами |
+| Не переписывать существующие текстовые вызовы | `LLMDispatcher.process()` продолжает вызывать `provider.answer()` |
+| Поддержать sync-only контексты | `SyncLLMDispatcher` остается для CLI/WSGI кода |
 
-`core` решает это через единый pipeline:
+Для новой Gemini-интеграции лучше использовать прямые методы `GeminiProvider.generate_text()`, `generate_json()`, `generate_image_bytes()` и `generate_imagen_bytes()`.
+
+Сохраненный текстовый pipeline:
 
 ```
 @router.prompt("mode") → PromptResult (frozen DTO) → LLMProviderProtocol.answer()
@@ -32,7 +34,7 @@
                      │ include_router(router)
                      ▼
           ┌──────────────────────┐
-          │    LLMDispatcher     │  оркестрирует builder → provider
+          │    LLMDispatcher     │  legacy text builder → provider
           │                      │
           │  .process(mode, **kw)│
           └──────┬───────────────┘
@@ -52,19 +54,20 @@
 
 | Компонент | Класс | Роль |
 |-----------|-------|------|
-| `protocol.py` | `PromptResult` | Frozen DTO — иммутабельный промпт, передаваемый провайдерам |
-| `protocol.py` | `LLMProviderProtocol` | Структурный протокол — любой класс с `async answer()` подходит |
+| `protocol.py` | `PromptResult` | Frozen DTO для legacy text prompt builders |
+| `protocol.py` | `LLMProviderProtocol` | Структурный текстовый compatibility-протокол для `answer()` |
 | `protocol.py` | `PromptBuilder` | Type alias для `async def (...) -> PromptResult` |
 | `router.py` | `LLMRouter` | Реестр: связывает строки `mode` с функциями-билдерами через декоратор |
-| `dispatcher.py` | `LLMDispatcher` | Связывает router + provider; единая точка входа для выполнения промптов |
+| `dispatcher.py` | `LLMDispatcher` | Выполняет legacy text prompts и делегирует прямые provider convenience methods |
 | `sync.py` | `SyncLLMDispatcher` | Оборачивает `LLMDispatcher` через `asyncio.run()` для WSGI/CLI |
 | `exceptions.py` | `LLMProviderError` | Базовое исключение, поднимаемое всеми реализациями провайдеров |
 
 ## Ключевые решения
 
-- **Frozen DTO (`PromptResult`)** — строится один раз в билдере, не может быть изменён downstream. Исключает случайный shared state между запросами.
-- **`@runtime_checkable` Protocol** — `isinstance(obj, LLMProviderProtocol)` работает в runtime. Наследование от базового класса не требуется.
-- **Mode-based dispatch** — `dispatcher.process("chat", ...)` находит зарегистрированный билдер. Добавление нового типа промпта не затрагивает существующий код.
+- **Direct provider APIs first** — возможности Gemini раскрываются явными методами, а не проталкиваются через универсальный provider interface.
+- **Frozen DTO (`PromptResult`)** — сохранен для legacy builders и не может быть изменён downstream.
+- **`@runtime_checkable` Protocol** — оставлен для runtime-проверок на compatibility boundaries.
+- **Mode-based dispatch — legacy text infrastructure** — `dispatcher.process("chat", ...)` находит зарегистрированный билдер для существующих flows.
 - **Все логи на `DEBUG`** — диспетчер пишет только debug-сообщения. Уровень логирования в продакшне управляет видимостью без изменений кода.
 - **`SyncLLMDispatcher` только для Django** — использует `asyncio.run()`, создающий новый event loop. Никогда не вызывать из async-контекста (ARQ, async views, боты) — используйте `LLMDispatcher` напрямую.
 

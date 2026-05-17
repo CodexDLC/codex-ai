@@ -1,7 +1,7 @@
 """
 codex_ai.providers
 ==================
-Provider implementations (Gemini and OpenAI).
+Provider adapters. Gemini is the primary API; OpenAI is text-only.
 
 Providers are lazy-loaded to avoid mandatory dependency on all SDK packages.
 """
