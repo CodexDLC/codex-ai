@@ -1,10 +1,10 @@
 """
 codex_ai.core.dispatcher
 =========================
-LLMDispatcher — orchestrates prompt building and LLM provider calls.
+LLMDispatcher — legacy text prompt dispatcher plus direct provider delegation.
 
 Registers routers, selects the correct builder by mode,
-and delegates response generation to the provider.
+and delegates text response generation to the provider's ``answer()`` method.
 """
 
 from __future__ import annotations
@@ -12,7 +12,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .protocol import LLMProviderProtocol, PromptResult
+from .protocol import (
+    ImageGenerationProvider,
+    ImageInputLike,
+    ImagenGenerationProvider,
+    JsonGenerationProvider,
+    LLMProviderProtocol,
+    PromptResult,
+    TextGenerationProvider,
+)
 from .router import LLMRouter
 
 log = logging.getLogger(__name__)
@@ -20,13 +28,14 @@ log = logging.getLogger(__name__)
 
 class LLMDispatcher:
     """
-    Orchestrates prompt building and LLM response generation.
+    Orchestrates legacy text prompt building and provider calls.
 
     Connects one or more LLMRouters, selects the builder by mode,
-    calls it with provided kwargs, then passes the result to the provider.
+    calls it with provided kwargs, then passes the result to the provider's
+    text compatibility ``answer()`` method.
 
     Args:
-        provider: LLM backend implementing LLMProviderProtocol.
+        provider: Text-compatible provider implementing LLMProviderProtocol.
 
     Example:
         ```python
@@ -82,3 +91,94 @@ class LLMDispatcher:
         log.debug(f"LLMDispatcher | calling builder '{builder.__name__}' for mode='{mode}'")
         prompt: PromptResult = await builder(**kw)
         return await self._provider.answer(prompt, **kw)
+
+    async def generate_image_bytes(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        response_mime_type: str = "image/webp",
+        image_config: dict[str, Any] | None = None,
+        input_images: list[ImageInputLike] | None = None,
+        **kwargs: Any,
+    ) -> tuple[bytes, str]:
+        """
+        Generate image bytes through a provider that supports image generation.
+
+        This method does not use prompt routers and never falls back to the text
+        ``answer()`` contract.
+        """
+        if not isinstance(self._provider, ImageGenerationProvider):
+            provider_name = type(self._provider).__name__
+            raise TypeError(
+                f"Provider {provider_name} does not support image generation; expected generate_image_bytes(...)"
+            )
+
+        return await self._provider.generate_image_bytes(
+            prompt,
+            model=model,
+            response_mime_type=response_mime_type,
+            image_config=image_config,
+            input_images=input_images,
+            **kwargs,
+        )
+
+    async def generate_imagen_bytes(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        response_mime_type: str = "image/jpeg",
+        **kwargs: Any,
+    ) -> tuple[bytes, str]:
+        """
+        Generate Imagen bytes through a provider that supports Imagen generation.
+
+        This method is intentionally separate from ``generate_image_bytes()``
+        because Imagen uses ``generate_images`` and an image output MIME config.
+        """
+        if not isinstance(self._provider, ImagenGenerationProvider):
+            provider_name = type(self._provider).__name__
+            raise TypeError(
+                f"Provider {provider_name} does not support Imagen generation; expected generate_imagen_bytes(...)"
+            )
+
+        return await self._provider.generate_imagen_bytes(
+            prompt,
+            model=model,
+            response_mime_type=response_mime_type,
+            **kwargs,
+        )
+
+    async def generate_text(
+        self,
+        prompt: PromptResult | str,
+        *,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Generate text directly through a provider that supports direct text generation.
+        """
+        if not isinstance(self._provider, TextGenerationProvider):
+            provider_name = type(self._provider).__name__
+            raise TypeError(f"Provider {provider_name} does not support text generation; expected generate_text(...)")
+
+        return await self._provider.generate_text(prompt, model=model, **kwargs)
+
+    async def generate_json(
+        self,
+        prompt: PromptResult | str,
+        *,
+        schema: Any = None,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Generate JSON directly through a provider that supports JSON generation.
+        """
+        if not isinstance(self._provider, JsonGenerationProvider):
+            provider_name = type(self._provider).__name__
+            raise TypeError(f"Provider {provider_name} does not support JSON generation; expected generate_json(...)")
+
+        return await self._provider.generate_json(prompt, schema=schema, model=model, **kwargs)

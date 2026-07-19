@@ -1,22 +1,39 @@
 """
 codex_ai.core
 =============
-Core types, contracts, and dispatching logic for the LLM abstraction layer.
+Core legacy text router, dispatcher, and provider compatibility contracts.
 """
 
 from .dispatcher import LLMDispatcher
 from .exceptions import LLMProviderError
-from .protocol import LLMMessage, LLMProviderProtocol, PromptBuilder, PromptResult
+from .protocol import (
+    ImageGenerationProvider,
+    ImageInput,
+    ImageInputLike,
+    ImagenGenerationProvider,
+    JsonGenerationProvider,
+    LLMMessage,
+    LLMProviderProtocol,
+    PromptBuilder,
+    PromptResult,
+    TextGenerationProvider,
+)
 from .router import LLMRouter
 from .sync import SyncLLMDispatcher
 
 __all__ = [
     "LLMDispatcher",
     "LLMProviderError",
+    "ImageGenerationProvider",
+    "ImageInput",
+    "ImageInputLike",
+    "ImagenGenerationProvider",
+    "JsonGenerationProvider",
     "LLMMessage",
     "LLMProviderProtocol",
     "PromptBuilder",
     "PromptResult",
+    "TextGenerationProvider",
     "LLMRouter",
     "SyncLLMDispatcher",
 ]

@@ -1,7 +1,16 @@
 import pytest
 from pydantic import ValidationError
 
-from codex_ai.core.protocol import LLMMessage, LLMProviderProtocol, PromptResult
+from codex_ai.core.protocol import (
+    ImageGenerationProvider,
+    ImageInput,
+    ImagenGenerationProvider,
+    JsonGenerationProvider,
+    LLMMessage,
+    LLMProviderProtocol,
+    PromptResult,
+    TextGenerationProvider,
+)
 
 # ---------------------------------------------------------------------------
 # LLMMessage
@@ -55,6 +64,13 @@ def test_prompt_result_empty_messages_allowed():
     assert result.messages == []
 
 
+def test_image_input_accepts_bytes_and_mime_type():
+    image = ImageInput(data=b"png", mime_type="image/png")
+
+    assert image.data == b"png"
+    assert image.mime_type == "image/png"
+
+
 # ---------------------------------------------------------------------------
 # LLMProviderProtocol structural checks
 # ---------------------------------------------------------------------------
@@ -83,3 +99,71 @@ def test_runtime_checkable_does_not_verify_async():
 
     # This is the documented limitation: sync method still passes the check.
     assert isinstance(SyncAnswer(), LLMProviderProtocol)
+
+
+# ---------------------------------------------------------------------------
+# ImageGenerationProvider structural checks
+# ---------------------------------------------------------------------------
+
+
+def test_image_generation_provider_structural_check():
+    class MockImageProvider:
+        async def generate_image_bytes(
+            self,
+            prompt: str,
+            *,
+            model: str | None = None,
+            response_mime_type: str = "image/webp",
+            image_config: dict | None = None,
+            input_images: list[ImageInput] | None = None,
+            **kwargs,
+        ) -> tuple[bytes, str]:
+            return b"image", response_mime_type
+
+    assert isinstance(MockImageProvider(), ImageGenerationProvider)
+
+
+def test_object_without_generate_image_bytes_fails_image_provider_check():
+    assert not isinstance(object(), ImageGenerationProvider)
+
+
+def test_imagen_generation_provider_structural_check():
+    class MockImagenProvider:
+        async def generate_imagen_bytes(
+            self,
+            prompt: str,
+            *,
+            model: str | None = None,
+            response_mime_type: str = "image/jpeg",
+            **kwargs,
+        ) -> tuple[bytes, str]:
+            return b"image", response_mime_type
+
+    assert isinstance(MockImagenProvider(), ImagenGenerationProvider)
+
+
+def test_object_without_generate_imagen_bytes_fails_imagen_provider_check():
+    assert not isinstance(object(), ImagenGenerationProvider)
+
+
+def test_text_generation_provider_structural_check():
+    class MockTextProvider:
+        async def generate_text(self, prompt: PromptResult | str, *, model: str | None = None, **kwargs) -> str:
+            return "text"
+
+    assert isinstance(MockTextProvider(), TextGenerationProvider)
+
+
+def test_json_generation_provider_structural_check():
+    class MockJsonProvider:
+        async def generate_json(
+            self,
+            prompt: PromptResult | str,
+            *,
+            schema=None,
+            model: str | None = None,
+            **kwargs,
+        ):
+            return {}
+
+    assert isinstance(MockJsonProvider(), JsonGenerationProvider)

@@ -1,6 +1,8 @@
 # Core — Data Flow
 
-## Request Lifecycle
+## Legacy Text Request Lifecycle
+
+This flow is retained for existing `LLMRouter` integrations. New Gemini work should use direct provider methods.
 
 ```
 1. Application calls:
@@ -13,14 +15,14 @@
    prompt = await builder(text="Hello!")
    # → PromptResult(messages=[LLMMessage(role="user", content="Hello!")])
 
-4. Dispatcher calls provider:
+4. Dispatcher calls the text compatibility method:
    response = await self._provider.answer(prompt, **kw)
 
 5. Provider returns text:
    "Hi there! How can I help?"
 ```
 
-## Component Interactions
+## Legacy Component Interactions
 
 ```
 Application

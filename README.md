@@ -2,61 +2,142 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/codex-ai.svg)](https://pypi.org/project/codex-ai/)
 [![Python](https://img.shields.io/pypi/pyversions/codex-ai.svg)](https://pypi.org/project/codex-ai/)
-[![CI](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml)
+[![CI](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/codexdlc/codex-ai/blob/main/LICENSE)
 
-Agnostic LLM abstraction layer for the **Codex platform**. Unified async interface for OpenAI, Google Gemini, Anthropic, and OpenRouter with prompt routing and failover support.
+Gemini-first API helpers for the Codex ecosystem. The active surface is direct Gemini text, JSON, Gemini image, and Imagen generation. OpenAI provides modern Responses API text, structured JSON, and streaming helpers. The router/dispatcher layer is kept for legacy text workflows.
 
----
+## Install
+
+```bash
+pip install codex-ai
+pip install "codex-ai[gemini]"
+pip install "codex-ai[openai]"
+pip install "codex-ai[openai,gemini]"
+```
+
+Requires Python 3.12 or newer.
+
+## Gemini Direct API
+
+```python
+from pathlib import Path
+
+from pydantic import BaseModel
+
+from codex_ai import GeminiProvider, ImageInput
+
+
+class LootItem(BaseModel):
+    name: str
+    power: int
+
+
+gemini = GeminiProvider(api_key="AIza...")
+
+text = await gemini.generate_text("Write one short tavern rumor.")
+loot = await gemini.generate_json("Create one loot item.", schema=LootItem)
+image_bytes, content_type = await gemini.generate_image_bytes(
+    "Square tactical dark fantasy ruined capital city map, no labels.",
+    model="gemini-3-pro-image-preview",
+    response_mime_type="image/png",
+    image_config={"aspect_ratio": "1:1", "image_size": "4K"},
+)
+
+source_image_bytes = Path("source.png").read_bytes()
+edited_bytes, edited_content_type = await gemini.generate_image_bytes(
+    "Keep the composition, but redraw it as a watercolor map.",
+    response_mime_type="image/png",
+    input_images=[ImageInput(data=source_image_bytes, mime_type="image/png")],
+)
+
+imagen_bytes, imagen_content_type = await gemini.generate_imagen_bytes(
+    "A fantasy clan banner, game icon style.",
+    response_mime_type="image/jpeg",
+)
+```
+
+`answer(prompt)` remains available as a compatibility wrapper for text generation.
+
+`generate_image_bytes()` targets Gemini image models through `generate_content` and treats
+`response_mime_type` as a preferred/fallback MIME type. It does not pass image MIME values
+to Gemini's text `response_mime_type` config field. Pass Gemini image controls such as
+`aspect_ratio` and `image_size` with `image_config`; if a `4K` request is rejected,
+the Gemini provider retries once with `2K`. Pass `input_images` with `ImageInput`
+items to provide reference/edit-source images for Gemini image models. Use `generate_imagen_bytes()` for
+Imagen models; that path uses `generate_images` and passes the requested MIME as
+`output_mime_type`.
+
+## OpenAI Responses API
+
+```python
+from pydantic import BaseModel
+
+from codex_ai import OpenAIProvider
+
+
+class LootItem(BaseModel):
+    name: str
+    power: int
+
+
+openai = OpenAIProvider(api_key="sk-...")
+
+text = await openai.generate_text("Write one short tavern rumor.")
+loot = await openai.generate_json("Create one loot item.", schema=LootItem)
+
+async for chunk in openai.stream_text("Tell a short story."):
+    print(chunk, end="")
+```
+
+The OpenAI provider uses the Responses API and the `openai` 2.x SDK. Responses
+are not stored by default. Its default `gpt-5.6-luna` model uses
+`reasoning={"effort": "none"}` to retain a cost- and latency-sensitive role;
+override the model and reasoning options per request when a workload needs more
+capability.
+
+## Legacy Text Router
+
+```python
+from codex_ai import GeminiProvider, LLMDispatcher, LLMMessage, LLMRouter, PromptResult
+
+router = LLMRouter()
+
+
+@router.prompt("chat")
+async def build_chat(text: str, **kw) -> PromptResult:
+    return PromptResult(
+        messages=[LLMMessage(role="user", content=text)],
+        system="You are a helpful assistant.",
+    )
+
+
+dispatcher = LLMDispatcher(provider=GeminiProvider(api_key="AIza..."))
+dispatcher.include_router(router)
+
+response = await dispatcher.process("chat", text="Hello!")
+```
+
+Use this path only when you already have prompt builders registered through `LLMRouter`.
+New Gemini integrations should call `generate_text()`, `generate_json()`,
+`generate_image_bytes()`, or `generate_imagen_bytes()` directly.
 
 ## Modules
 
 | Module | Extra | Description |
 | :--- | :--- | :--- |
-| `core` | — | Dispatcher, Router, PromptResult — prompt orchestration layer |
-| `providers` | `[openai]` `[gemini]` `[anthropic]` | Provider implementations for each LLM vendor |
+| `codex_ai.providers.gemini` | `[gemini]` | Primary API: Gemini text, JSON, Gemini image, and Imagen generation via pinned `google-genai` |
+| `codex_ai.providers.openai` | `[openai]` | OpenAI Responses API text, structured JSON, and streaming adapter |
+| `codex_ai.core` | - | Legacy text router/dispatcher contracts and shared provider exceptions |
 
-## Install
+## Development
 
 ```bash
-pip install "codex-ai[openai,gemini]"
-```
-
-## Quick Start
-
-Define prompts once — route to any provider:
-
-```python
-from codex_ai import LLMDispatcher, LLMRouter, PromptResult, OpenAIProvider, GeminiProvider
-from codex_ai.providers import MultiLLMProvider
-
-router = LLMRouter()
-
-@router.prompt("chat")
-async def build_chat(text: str, **kw) -> PromptResult:
-    return PromptResult(
-        messages=[{"role": "user", "content": text}],
-        system="You are a helpful assistant.",
-    )
-
-# Multiple providers with automatic failover: OpenAI → Gemini
-provider = MultiLLMProvider(
-    providers={
-        "openai": OpenAIProvider(api_key="sk-..."),
-        "gemini": GeminiProvider(api_key="AIza..."),
-    },
-    default="openai",
-    failover_list=["gemini"],  # if OpenAI fails — try Gemini
-)
-
-dispatcher = LLMDispatcher(provider=provider)
-dispatcher.include_router(router)
-
-# Uses default (OpenAI), falls back to Gemini on error
-response = await dispatcher.process("chat", text="Hello!")
-
-# Or pick a provider explicitly
-response = await dispatcher.process("chat", text="Hello!", provider="gemini")
+uv sync --extra dev
+uv run pytest
+uv run mypy src/
+uv run pre-commit run --all-files
+uv build --no-sources
 ```
 
 ## Documentation
@@ -64,7 +145,3 @@ response = await dispatcher.process("chat", text="Hello!", provider="gemini")
 Full docs with architecture, API reference, and data flow diagrams:
 
 **[codexdlc.github.io/codex-ai](https://codexdlc.github.io/codex-ai/)**
-
-## Part of the Codex ecosystem
-
-[codex-core](https://github.com/codexdlc/codex-core) · **codex-ai** · [codex-platform](https://github.com/codexdlc/codex-platform) · [codex-bot](https://github.com/codexdlc/codex-bot)

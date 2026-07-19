@@ -2,62 +2,66 @@
 
 ## Purpose
 
-`codex_ai.providers` contains concrete implementations of `LLMProviderProtocol`. Each provider wraps a vendor SDK, translates `PromptResult` into the vendor's wire format, and raises `LLMProviderError` on failure.
+`codex_ai.providers` contains concrete SDK adapters, not a broad interchangeable provider framework. Gemini is the product focus; OpenAI is a separate modern Responses API adapter.
 
-## Why It's a Module
+Gemini is the primary target and exposes direct methods for text, JSON, and image generation:
 
-| Problem | What breaks |
-|---------|-------------|
-| Each vendor SDK has a different API surface | Business code must know about `AsyncOpenAI`, `genai.Client`, `AsyncAnthropic` |
-| System messages work differently across vendors | OpenAI uses `developer`/`system` role, Gemini uses `system_instruction`, Anthropic uses a top-level `system` param |
-| Production systems need fallback on API errors | A single-provider setup goes down when the vendor has an outage |
+```python
+await gemini.generate_text(...)
+await gemini.generate_json(...)
+await gemini.generate_image_bytes(...)
+await gemini.generate_imagen_bytes(...)
+```
 
-`providers` solves this with a uniform `answer(prompt, **kw) → str` interface and `MultiLLMProvider` for automatic failover.
+OpenAI exposes direct text, structured JSON, and typed streaming helpers:
+
+```python
+await openai.generate_text(...)
+await openai.generate_json(..., schema=MyModel)
+async for chunk in openai.stream_text(...):
+    ...
+```
 
 ## Architecture
 
 ```
-                    LLMProviderProtocol
-                   .answer(prompt, **kw)
-                          │
-        ┌─────────────────┼──────────────────────┐
-        │                 │                      │
-        ▼                 ▼                      ▼
-┌──────────────┐ ┌──────────────┐   ┌────────────────────┐
-│OpenAIProvider│ │GeminiProvider│   │  MultiLLMProvider  │
-│              │ │              │   │                    │
-│ AsyncOpenAI  │ │ genai.Client │   │ {name: provider}   │
-│ gpt-4o-mini  │ │ gemini-2.5   │   │ default + failover │
-└──────────────┘ └──────────────┘   └──────────┬─────────┘
-                                               │
-                        ┌──────────────────────┼───────────────────┐
-                        ▼                      ▼                   ▼
-               OpenAIProvider        GeminiProvider       AnthropicProvider
-               (primary)             (failover[0])        (failover[1])
+PromptResult/String
+      │
+      ├── GeminiProvider.generate_text(...)        -> str
+      ├── GeminiProvider.generate_json(...)        -> dict | BaseModel
+      ├── GeminiProvider.generate_image_bytes(...) -> tuple[bytes, str]
+      ├── GeminiProvider.generate_imagen_bytes(...) -> tuple[bytes, str]
+      ├── OpenAIProvider.generate_text(...)        -> str
+      ├── OpenAIProvider.generate_json(...)        -> dict | BaseModel
+      └── OpenAIProvider.stream_text(...)          -> AsyncIterator[str]
 ```
 
-**OpenRouterProvider** subclasses `OpenAIProvider` with a remapped `base_url` — full OpenAI SDK compatibility, hundreds of models.
+The legacy router pipeline remains available:
+
+```
+LLMRouter builder -> PromptResult -> LLMDispatcher.process() -> provider.answer() -> str
+```
+
+`answer()` is a compatibility wrapper for text generation.
 
 ## Key Components
 
 | Component | Class | SDK | Default Model |
 |-----------|-------|-----|---------------|
-| `openai.py` | `OpenAIProvider` | `openai` | `gpt-4o-mini` |
 | `gemini.py` | `GeminiProvider` | `google-genai` | `gemini-2.5-flash-lite` |
-| `anthropic_.py` | `AnthropicProvider` | `anthropic` | `claude-3-5-sonnet-latest` |
-| `openrouter.py` | `OpenRouterProvider` | `openai` (remapped) | free Gemini via OpenRouter |
-| `multi.py` | `MultiLLMProvider` | — | configurable |
+| `openai.py` | `OpenAIProvider` | `openai` 2.x | `gpt-5.6-luna` |
 
 ## Key Design Decisions
 
-- **Lazy imports** — provider classes are not imported at package load time. `from codex_ai import OpenAIProvider` only imports the `openai` SDK when that line executes. Installing `codex-ai[gemini]` does not pull the OpenAI SDK.
-- **`PromptResult` fields take priority over `**kw`** — if `prompt.model` is set, it overrides any `model=` passed in kwargs. Builder intent wins over call-site overrides.
-- **`MultiLLMProvider` provider inference** — model name prefix auto-selects provider: `gpt-*` → openai, `gemini-*` → gemini, `claude-*` → anthropic, `vendor/model` → openrouter. Explicit `provider=` kwarg always wins.
-- **Failover on `LLMProviderError` only** — each provider wraps SDK exceptions in `LLMProviderError`. Only these trigger the failover chain; unexpected exceptions propagate immediately.
-- **Custom providers need no registration** — implement `async def answer(self, prompt: PromptResult, **kw) -> str` and pass the instance directly to `LLMDispatcher`.
-
-## See Also
-
-- [Data Flow](data_flow.md) — message format translation per vendor
-- [Core Overview](../core/README.md) — how providers plug into the dispatcher
-- [API Reference: Providers](../../../en/api/providers/openai.md) — full class documentation
+- Gemini-specific capabilities are represented directly instead of being hidden behind a broad universal abstraction.
+- JSON generation uses provider-native JSON configuration and still validates locally with `json.loads` and optional Pydantic models.
+- OpenAI uses the Responses API exclusively; the old Chat Completions path is not retained.
+- OpenAI requests default to `store=False` and `reasoning={"effort": "none"}`.
+- OpenAI Pydantic schemas use the SDK's native `responses.parse()` structured-output path.
+- The OpenAI SDK client is injectable behind a small Responses API port for deterministic tests and custom transports.
+- Gemini image generation and Imagen generation are separate explicit methods because they use different SDK calls.
+- `generate_image_bytes()` uses Gemini `generate_content` with image modality. Its `response_mime_type` is only a preferred/fallback MIME type, and Gemini image controls are passed through `image_config`.
+- `generate_image_bytes()` can also accept `input_images=[ImageInput(...)]` for image reference/edit workflows; without `input_images`, the prompt-only path is unchanged.
+- `generate_image_bytes()` retries a rejected `image_config={"image_size": "4K"}` request once as `2K`.
+- `generate_imagen_bytes()` uses Imagen `generate_images` and passes the requested MIME as `output_mime_type`.
+- Anthropic, OpenRouter, and multi-provider failover are not active APIs in this line.

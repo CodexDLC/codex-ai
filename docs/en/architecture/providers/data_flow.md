@@ -1,42 +1,90 @@
 # Providers — Data Flow
 
-## Single Provider
+## Gemini Text
 
 ```
-LLMDispatcher
-    │
-    └── OpenAIProvider.answer(prompt)
-            │
-            ├── Convert LLMMessage list → OpenAI messages format
-            ├── Insert system message if present
-            ├── Extract model / temperature / max_tokens from prompt or kw
-            └── AsyncOpenAI.chat.completions.create(...)
-                        │
-                        ▼
-                   response text: str
+PromptResult | str
+    -> GeminiProvider.generate_text()
+    -> google.genai.models.generate_content()
+    -> response.text
+    -> str
 ```
 
-## MultiLLMProvider Failover
+`GeminiProvider.answer()` delegates to `generate_text()` for compatibility with `LLMDispatcher.process()`.
+
+## Gemini JSON
 
 ```
-LLMDispatcher
-    │
-    └── MultiLLMProvider.answer(prompt, provider="openai")
-            │
-            ├── Determine target: explicit / model-prefix / default
-            ├── Try primary provider
-            │       ├── Success → return text
-            │       └── LLMProviderError → log error, try next
-            ├── Try failover_list[0]
-            │       ├── Success → return text
-            │       └── LLMProviderError → try next
-            └── All failed → raise last LLMProviderError
+PromptResult | str
+    -> GeminiProvider.generate_json(schema=...)
+    -> GenerateContentConfig(response_mime_type="application/json", response_schema=schema)
+    -> response.text
+    -> json.loads()
+    -> optional Pydantic validation
 ```
 
-## Message Format Translation
+## Gemini Images
 
-| Field | OpenAI | Gemini | Anthropic |
-|-------|--------|--------|-----------|
-| `role: user` | `role: "user"` | `role: "user"` | `role: "user"` |
-| `role: assistant` | `role: "assistant"` | `role: "model"` | `role: "assistant"` |
-| `system` | inserted as `developer`/`system` message | `system_instruction` config | top-level `system` param |
+```
+prompt: str
+    -> GeminiProvider.generate_image_bytes()
+    -> GenerateContentConfig(response_modalities=[IMAGE], image_config=...)
+    -> first inline_data image part
+    -> (bytes, actual_mime_type)
+```
+
+With `input_images`, the provider sends multimodal content:
+
+```
+prompt: str + input_images: list[ImageInput]
+    -> text part + inline_data image parts
+    -> GeminiProvider.generate_image_bytes()
+    -> first returned inline_data image part
+    -> (bytes, actual_mime_type)
+```
+
+`response_mime_type` is not passed to `GenerateContentConfig.response_mime_type` on this path; it is only a fallback content type when Gemini omits `inline_data.mime_type`.
+When `image_config.image_size` is `4K` and Gemini rejects the request, the provider retries once with `image_size` changed to `2K`.
+
+## Imagen Images
+
+```
+prompt: str
+    -> GeminiProvider.generate_imagen_bytes()
+    -> GenerateImagesConfig(output_mime_type=requested_mime)
+    -> first generated_images image
+    -> (bytes, actual_mime_type)
+```
+
+## OpenAI Text
+
+```
+PromptResult | str
+    -> OpenAIProvider.generate_text()
+    -> _OpenAIRequestMapper
+    -> responses.create(store=False)
+    -> response.output_text
+    -> str
+```
+
+## OpenAI Structured JSON
+
+```
+PromptResult | str + Pydantic schema
+    -> OpenAIProvider.generate_json()
+    -> responses.parse(text_format=schema)
+    -> response.output_parsed
+    -> BaseModel
+```
+
+Without a schema, the provider requests JSON mode and decodes `response.output_text`.
+
+## OpenAI Streaming
+
+```
+PromptResult | str
+    -> OpenAIProvider.stream_text()
+    -> responses.create(stream=True)
+    -> response.output_text.delta events
+    -> AsyncIterator[str]
+```

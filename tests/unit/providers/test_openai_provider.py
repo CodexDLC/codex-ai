@@ -1,265 +1,272 @@
-"""Tests for OpenAIProvider."""
+"""Tests for the Responses API based OpenAIProvider."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from openai import OpenAIError
+from pydantic import BaseModel
 
 from codex_ai.core.exceptions import LLMProviderError
-from codex_ai.core.protocol import LLMMessage, LLMProviderProtocol, PromptResult
+from codex_ai.core.protocol import (
+    JsonGenerationProvider,
+    LLMMessage,
+    LLMProviderProtocol,
+    PromptResult,
+    TextGenerationProvider,
+)
 from codex_ai.providers.openai import OpenAIProvider
 
 
-def _make_completion(content: str | None = "hello from openai"):
-    mock = MagicMock()
-    if content is None:
-        mock.choices = []
-    else:
-        choice = MagicMock()
-        choice.message.content = content
-        mock.choices = [choice]
-    return mock
+class LootItem(BaseModel):
+    name: str
+    rarity: str
 
 
-def _make_provider(model: str = "gpt-4o-mini") -> tuple[OpenAIProvider, AsyncMock]:
-    provider = OpenAIProvider(api_key="test-key", model=model)
-    mock_create = AsyncMock(return_value=_make_completion())
-    provider._client = MagicMock()
-    provider._client.chat.completions.create = mock_create
-    return provider, mock_create
+def _response(text: str = "hello from openai"):
+    return SimpleNamespace(output_text=text)
 
 
-# ---------------------------------------------------------------------------
-# Protocol compliance
-# ---------------------------------------------------------------------------
+def _make_provider(
+    model: str = "gpt-5.6-luna",
+    *,
+    store: bool = False,
+) -> tuple[OpenAIProvider, AsyncMock, AsyncMock]:
+    create = AsyncMock(return_value=_response())
+    parse = AsyncMock()
+    client = SimpleNamespace(responses=SimpleNamespace(create=create, parse=parse))
+    provider = OpenAIProvider(client=client, model=model, store=store)
+    return provider, create, parse
 
 
-def test_openai_provider_satisfies_protocol():
-    provider = OpenAIProvider(api_key="x")
+def test_openai_provider_satisfies_supported_protocols():
+    provider, _, _ = _make_provider()
+
     assert isinstance(provider, LLMProviderProtocol)
+    assert isinstance(provider, TextGenerationProvider)
+    assert isinstance(provider, JsonGenerationProvider)
 
 
-# ---------------------------------------------------------------------------
-# Message format conversion
-# ---------------------------------------------------------------------------
+def test_openai_provider_builds_sdk_client_with_explicit_runtime_settings(monkeypatch):
+    client = MagicMock()
+    client_factory = MagicMock(return_value=client)
+    monkeypatch.setattr("codex_ai.providers.openai.AsyncOpenAI", client_factory)
+
+    provider = OpenAIProvider(
+        api_key="test-key",  # pragma: allowlist secret
+        model="gpt-5.6-luna",
+        timeout=30.0,
+        max_retries=4,
+        base_url="https://example.test/v1",
+    )
+
+    client_factory.assert_called_once_with(
+        api_key="test-key",  # pragma: allowlist secret
+        timeout=30.0,
+        max_retries=4,
+        base_url="https://example.test/v1",
+    )
+    assert provider._client is client
 
 
-async def test_openai_builds_user_messages():
-    provider, mock_create = _make_provider()
+async def test_generate_text_uses_responses_api_with_private_storage_default():
+    provider, create, _ = _make_provider()
+
+    result = await provider.generate_text("hello")
+
+    create.assert_awaited_once_with(
+        model="gpt-5.6-luna",
+        input="hello",
+        reasoning={"effort": "none"},
+        store=False,
+    )
+    assert result == "hello from openai"
+
+
+async def test_generate_text_maps_prompt_result_to_input_and_instructions():
+    provider, create, _ = _make_provider()
     prompt = PromptResult(
         messages=[
             LLMMessage(role="user", content="Hello"),
             LLMMessage(role="assistant", content="Hi"),
             LLMMessage(role="user", content="Bye"),
-        ]
+        ],
+        system="Follow the product rules.",
     )
-    await provider.answer(prompt)
 
-    _, kwargs = mock_create.call_args
-    messages = kwargs["messages"]
-    # system was empty, so no prepended message
-    assert len(messages) == 3
-    assert messages[0] == {"role": "user", "content": "Hello"}
-    assert messages[1] == {"role": "assistant", "content": "Hi"}
-    assert messages[2] == {"role": "user", "content": "Bye"}
+    await provider.generate_text(prompt)
 
-
-# ---------------------------------------------------------------------------
-# system role branching: developer vs system
-# ---------------------------------------------------------------------------
+    kwargs = create.await_args.kwargs
+    assert kwargs["input"] == [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi"},
+        {"role": "user", "content": "Bye"},
+    ]
+    assert kwargs["instructions"] == "Follow the product rules."
 
 
-@pytest.mark.parametrize(
-    "model,expected_role",
-    [
-        ("gpt-4o-mini", "developer"),  # contains "gpt-4o"
-        ("gpt-4o", "developer"),
-        ("o1-mini", "developer"),  # startswith "o1"
-        ("o3", "developer"),  # startswith "o3"
-        ("gpt-3.5-turbo", "system"),  # plain system role
-        ("gpt-4", "system"),
-    ],
-)
-async def test_openai_system_role_by_model(model, expected_role):
-    provider, mock_create = _make_provider(model=model)
+async def test_explicit_model_override_wins_over_prompt_and_instance_defaults():
+    provider, create, _ = _make_provider(model="instance-model")
     prompt = PromptResult(
         messages=[LLMMessage(role="user", content="Hi")],
-        system="You are helpful",
+        model="prompt-model",
     )
-    await provider.answer(prompt)
 
-    _, kwargs = mock_create.call_args
-    first_msg = kwargs["messages"][0]
-    assert first_msg["role"] == expected_role
-    assert first_msg["content"] == "You are helpful"
+    await provider.generate_text(prompt, model="request-model")
+
+    assert create.await_args.kwargs["model"] == "request-model"
 
 
-async def test_openai_no_system_message_when_system_empty():
-    provider, mock_create = _make_provider()
+async def test_prompt_model_wins_over_instance_default():
+    provider, create, _ = _make_provider(model="instance-model")
     prompt = PromptResult(
         messages=[LLMMessage(role="user", content="Hi")],
-        system="",
+        model="prompt-model",
     )
-    await provider.answer(prompt)
 
-    _, kwargs = mock_create.call_args
-    assert len(kwargs["messages"]) == 1
-    assert kwargs["messages"][0]["role"] == "user"
+    await provider.generate_text(prompt)
 
-
-# ---------------------------------------------------------------------------
-# Parameter resolution: prompt > kw > instance default
-# ---------------------------------------------------------------------------
+    assert create.await_args.kwargs["model"] == "prompt-model"
 
 
-async def test_openai_model_from_prompt():
-    provider, mock_create = _make_provider()
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")], model="gpt-4")
-    await provider.answer(prompt)
+async def test_prompt_sampling_and_token_limit_are_mapped_to_responses_fields():
+    provider, create, _ = _make_provider()
+    prompt = PromptResult(
+        messages=[LLMMessage(role="user", content="Hi")],
+        temperature=0.0,
+        max_tokens=512,
+    )
 
-    _, kwargs = mock_create.call_args
-    assert kwargs["model"] == "gpt-4"
+    await provider.generate_text(prompt)
+
+    kwargs = create.await_args.kwargs
+    assert kwargs["temperature"] == 0.0
+    assert kwargs["max_output_tokens"] == 512
 
 
-async def test_openai_model_from_kw():
-    provider, mock_create = _make_provider()
+async def test_explicit_response_options_override_prompt_defaults():
+    provider, create, _ = _make_provider()
+    prompt = PromptResult(
+        messages=[LLMMessage(role="user", content="Hi")],
+        temperature=0.7,
+        max_tokens=512,
+    )
+
+    await provider.generate_text(
+        prompt,
+        temperature=0.2,
+        max_output_tokens=128,
+        reasoning={"effort": "low"},
+        text={"verbosity": "low"},
+        previous_response_id="resp_previous",
+        store=True,
+    )
+
+    kwargs = create.await_args.kwargs
+    assert kwargs["temperature"] == 0.2
+    assert kwargs["max_output_tokens"] == 128
+    assert kwargs["reasoning"] == {"effort": "low"}
+    assert kwargs["text"] == {"verbosity": "low"}
+    assert kwargs["previous_response_id"] == "resp_previous"
+    assert kwargs["store"] is True
+
+
+async def test_legacy_max_tokens_request_option_is_rejected():
+    provider, _, _ = _make_provider()
+
+    with pytest.raises(TypeError, match="max_output_tokens"):
+        await provider.generate_text("hello", max_tokens=100)
+
+
+async def test_answer_uses_responses_api_and_returns_output_text():
+    provider, create, _ = _make_provider()
+    create.return_value = _response("Great answer!")
     prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-    await provider.answer(prompt, model="gpt-3.5-turbo")
 
-    _, kwargs = mock_create.call_args
-    assert kwargs["model"] == "gpt-3.5-turbo"
-
-
-async def test_openai_model_falls_back_to_instance_default():
-    provider, mock_create = _make_provider(model="gpt-4o-mini")
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-    await provider.answer(prompt)
-
-    _, kwargs = mock_create.call_args
-    assert kwargs["model"] == "gpt-4o-mini"
-
-
-async def test_openai_temperature_from_prompt():
-    provider, mock_create = _make_provider()
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")], temperature=0.7)
-    await provider.answer(prompt)
-
-    _, kwargs = mock_create.call_args
-    assert kwargs["temperature"] == 0.7
-
-
-async def test_openai_temperature_from_kw():
-    provider, mock_create = _make_provider()
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-    await provider.answer(prompt, temperature=0.3)
-
-    _, kwargs = mock_create.call_args
-    assert kwargs["temperature"] == 0.3
-
-
-async def test_openai_temperature_not_passed_when_none():
-    provider, mock_create = _make_provider()
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-    await provider.answer(prompt)
-
-    _, kwargs = mock_create.call_args
-    assert "temperature" not in kwargs
-
-
-async def test_openai_max_tokens_from_prompt():
-    provider, mock_create = _make_provider()
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")], max_tokens=512)
-    await provider.answer(prompt)
-
-    _, kwargs = mock_create.call_args
-    assert kwargs["max_tokens"] == 512
-
-
-async def test_openai_max_tokens_from_kw():
-    provider, mock_create = _make_provider()
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-    await provider.answer(prompt, max_tokens=256)
-
-    _, kwargs = mock_create.call_args
-    assert kwargs["max_tokens"] == 256
-
-
-async def test_openai_max_tokens_not_passed_when_none():
-    provider, mock_create = _make_provider()
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-    await provider.answer(prompt)
-
-    _, kwargs = mock_create.call_args
-    assert "max_tokens" not in kwargs
-
-
-async def test_openai_known_kwargs_not_duplicated_in_create():
-    """model/temperature/max_tokens from kw must not appear twice in create()."""
-    provider, mock_create = _make_provider()
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-    await provider.answer(prompt, model="gpt-4", temperature=0.5, max_tokens=100)
-
-    _, kwargs = mock_create.call_args
-    # Each appears exactly once (as direct kwarg, not inside **runtime_kw)
-    assert kwargs["model"] == "gpt-4"
-    assert kwargs["temperature"] == 0.5
-    assert kwargs["max_tokens"] == 100
-
-
-# ---------------------------------------------------------------------------
-# Return value handling
-# ---------------------------------------------------------------------------
-
-
-async def test_openai_returns_content_string():
-    provider, mock_create = _make_provider()
-    mock_create.return_value = _make_completion("Great answer!")
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
     result = await provider.answer(prompt)
+
     assert result == "Great answer!"
 
 
-async def test_openai_returns_empty_string_when_choices_empty():
-    provider, mock_create = _make_provider()
-    mock_create.return_value = _make_completion(content=None)
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-    result = await provider.answer(prompt)
+async def test_generate_text_returns_empty_string_when_output_text_is_empty():
+    provider, create, _ = _make_provider()
+    create.return_value = _response("")
+
+    result = await provider.generate_text("hello")
+
     assert result == ""
 
 
-async def test_openai_returns_empty_string_when_content_none():
-    provider, mock_create = _make_provider()
-    completion = MagicMock()
-    choice = MagicMock()
-    choice.message.content = None
-    completion.choices = [choice]
-    mock_create.return_value = completion
+async def test_generate_json_uses_sdk_structured_output_parsing():
+    provider, _, parse = _make_provider()
+    parsed = LootItem(name="Moon blade", rarity="epic")
+    parse.return_value = SimpleNamespace(output_parsed=parsed)
 
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-    result = await provider.answer(prompt)
-    assert result == ""
+    result = await provider.generate_json(
+        "Create one loot item.",
+        schema=LootItem,
+        instructions="Return game data.",
+    )
 
-
-# ---------------------------------------------------------------------------
-# Error handling
-# ---------------------------------------------------------------------------
-
-
-async def test_openai_raises_llm_provider_error_on_exception():
-    provider, mock_create = _make_provider()
-    mock_create.side_effect = Exception("network failure")
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
-
-    with pytest.raises(LLMProviderError, match="OpenAI error"):
-        await provider.answer(prompt)
+    parse.assert_awaited_once_with(
+        model="gpt-5.6-luna",
+        input="Create one loot item.",
+        instructions="Return game data.",
+        reasoning={"effort": "none"},
+        store=False,
+        text_format=LootItem,
+    )
+    assert result == parsed
 
 
-async def test_openai_provider_error_chains_original():
-    provider, mock_create = _make_provider()
-    original = RuntimeError("timeout")
-    mock_create.side_effect = original
-    prompt = PromptResult(messages=[LLMMessage(role="user", content="Hi")])
+async def test_generate_json_without_schema_uses_json_mode_and_decodes_output():
+    provider, create, _ = _make_provider()
+    create.return_value = _response('{"name":"Moon blade","rarity":"epic"}')
 
-    with pytest.raises(LLMProviderError) as exc_info:
-        await provider.answer(prompt)
+    result = await provider.generate_json("Create one loot item.")
+
+    assert create.await_args.kwargs["text"] == {"format": {"type": "json_object"}}
+    assert result == {"name": "Moon blade", "rarity": "epic"}
+
+
+async def test_generate_json_rejects_missing_parsed_output():
+    provider, _, parse = _make_provider()
+    parse.return_value = SimpleNamespace(output_parsed=None)
+
+    with pytest.raises(LLMProviderError, match="no parsed output"):
+        await provider.generate_json("Create one loot item.", schema=LootItem)
+
+
+async def test_stream_text_yields_only_output_text_deltas():
+    async def events():
+        yield SimpleNamespace(type="response.created")
+        yield SimpleNamespace(type="response.output_text.delta", delta="Hello")
+        yield SimpleNamespace(type="response.output_text.delta", delta=" world")
+        yield SimpleNamespace(type="response.completed")
+
+    provider, create, _ = _make_provider()
+    create.return_value = events()
+
+    chunks = [chunk async for chunk in provider.stream_text("hello")]
+
+    assert chunks == ["Hello", " world"]
+    assert create.await_args.kwargs["stream"] is True
+
+
+async def test_openai_sdk_errors_are_wrapped_with_provider_context():
+    provider, create, _ = _make_provider()
+    original = OpenAIError("network failure")
+    create.side_effect = original
+
+    with pytest.raises(LLMProviderError, match="OpenAI Responses API error") as exc_info:
+        await provider.generate_text("hello")
 
     assert exc_info.value.__cause__ is original
+
+
+def test_provider_source_does_not_reference_chat_completions():
+    from pathlib import Path
+
+    source = Path("src/codex_ai/providers/openai.py").read_text(encoding="utf-8")
+
+    assert "chat.completions" not in source

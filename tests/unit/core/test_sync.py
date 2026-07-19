@@ -47,7 +47,12 @@ def test_sync_dispatcher_uses_asyncio_run(mock_provider, simple_prompt):
     sync = _make_sync_dispatcher(mock_provider, simple_prompt)
 
     with patch("codex_ai.core.sync.asyncio.run") as mock_run:
-        mock_run.return_value = "patched"
+
+        def _fake_run(coro):
+            coro.close()
+            return "patched"
+
+        mock_run.side_effect = _fake_run
         result = sync.process("chat")
 
     mock_run.assert_called_once()

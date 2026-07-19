@@ -20,5 +20,4 @@ def skip_if_no_key(env_var: str, provider: str):
 
 
 openai_key = skip_if_no_key("OPENAI_API_KEY", "OpenAI")
-anthropic_key = skip_if_no_key("ANTHROPIC_API_KEY", "Anthropic")
 gemini_key = skip_if_no_key("GOOGLE_API_KEY", "Gemini")
