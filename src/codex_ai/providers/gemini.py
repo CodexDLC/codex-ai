@@ -25,7 +25,7 @@ except ImportError as e:
 from pydantic import BaseModel, ValidationError
 
 from codex_ai.core.exceptions import LLMProviderError
-from codex_ai.core.protocol import PromptResult
+from codex_ai.core.protocol import ImageInput, ImageInputLike, PromptResult
 
 _DEFAULT_MODEL = "gemini-2.5-flash-lite"
 _DEFAULT_IMAGE_MODEL = "gemini-2.5-flash-image"
@@ -188,6 +188,7 @@ class GeminiProvider:
         model: str | None = None,
         response_mime_type: str = "image/webp",
         image_config: dict[str, Any] | None = None,
+        input_images: list[ImageInputLike] | None = None,
         **kwargs: Any,
     ) -> tuple[bytes, str]:
         """
@@ -201,14 +202,20 @@ class GeminiProvider:
         ``GenerateContentConfig.response_mime_type`` accepts text response MIME
         values, so image MIME values are not sent there. The actual MIME type
         returned in ``inline_data.mime_type`` wins when present.
+
+        Pass ``input_images`` to provide reference or edit-source images. When
+        present, the request is sent as multimodal content with the prompt text
+        followed by each image inline-data part.
         """
         selected_model = model or self._image_model
         requested_mime = response_mime_type
+        contents = self._build_image_contents(prompt, input_images=input_images)
 
         runtime_kw = kwargs.copy()
         runtime_kw.pop("model", None)
         runtime_kw.pop("response_mime_type", None)
         runtime_kw.pop("image_config", None)
+        runtime_kw.pop("input_images", None)
 
         config_kwargs: dict[str, Any] = {
             "response_modalities": [genai_types.Modality.IMAGE],
@@ -220,7 +227,7 @@ class GeminiProvider:
         try:
             return await self._generate_image_once(
                 model=selected_model,
-                prompt=prompt,
+                contents=contents,
                 config_kwargs=config_kwargs,
                 fallback_mime=requested_mime,
             )
@@ -232,7 +239,7 @@ class GeminiProvider:
                 try:
                     return await self._generate_image_once(
                         model=selected_model,
-                        prompt=prompt,
+                        contents=contents,
                         config_kwargs=fallback_config_kwargs,
                         fallback_mime=requested_mime,
                     )
@@ -247,14 +254,14 @@ class GeminiProvider:
         self,
         *,
         model: str,
-        prompt: str,
+        contents: Any,
         config_kwargs: dict[str, Any],
         fallback_mime: str,
     ) -> tuple[bytes, str]:
         config = genai_types.GenerateContentConfig(**config_kwargs)
         response = await self._client.aio.models.generate_content(
             model=model,
-            contents=prompt,
+            contents=contents,
             config=config,
         )
         image = self._extract_first_inline_image(response, fallback_mime=fallback_mime)
@@ -356,6 +363,35 @@ class GeminiProvider:
             return image_bytes, mime_type
 
         return None
+
+    @staticmethod
+    def _build_image_contents(prompt: str, *, input_images: list[ImageInputLike] | None) -> Any:
+        if not input_images:
+            return prompt
+
+        parts: list[dict[str, Any]] = [{"text": prompt}]
+        for image in input_images:
+            normalized = GeminiProvider._normalize_image_input(image)
+            parts.append(
+                {
+                    "inline_data": {
+                        "data": normalized.data,
+                        "mime_type": normalized.mime_type,
+                    }
+                }
+            )
+
+        return [{"role": "user", "parts": parts}]
+
+    @staticmethod
+    def _normalize_image_input(image: ImageInputLike) -> ImageInput:
+        if isinstance(image, ImageInput):
+            return image
+
+        try:
+            return ImageInput(data=bytes(image["data"]), mime_type=str(image["mime_type"]))
+        except KeyError as exc:
+            raise ValueError("Image input mappings must include 'data' and 'mime_type'") from exc
 
     @staticmethod
     def _describe_imagen_non_image_response(response: Any) -> str:

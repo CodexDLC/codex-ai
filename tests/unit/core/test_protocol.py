@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from codex_ai.core.protocol import (
     ImageGenerationProvider,
+    ImageInput,
     ImagenGenerationProvider,
     JsonGenerationProvider,
     LLMMessage,
@@ -63,6 +64,13 @@ def test_prompt_result_empty_messages_allowed():
     assert result.messages == []
 
 
+def test_image_input_accepts_bytes_and_mime_type():
+    image = ImageInput(data=b"png", mime_type="image/png")
+
+    assert image.data == b"png"
+    assert image.mime_type == "image/png"
+
+
 # ---------------------------------------------------------------------------
 # LLMProviderProtocol structural checks
 # ---------------------------------------------------------------------------
@@ -107,6 +115,7 @@ def test_image_generation_provider_structural_check():
             model: str | None = None,
             response_mime_type: str = "image/webp",
             image_config: dict | None = None,
+            input_images: list[ImageInput] | None = None,
             **kwargs,
         ) -> tuple[bytes, str]:
             return b"image", response_mime_type

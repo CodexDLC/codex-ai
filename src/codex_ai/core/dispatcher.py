@@ -14,6 +14,7 @@ from typing import Any
 
 from .protocol import (
     ImageGenerationProvider,
+    ImageInputLike,
     ImagenGenerationProvider,
     JsonGenerationProvider,
     LLMProviderProtocol,
@@ -98,6 +99,7 @@ class LLMDispatcher:
         model: str | None = None,
         response_mime_type: str = "image/webp",
         image_config: dict[str, Any] | None = None,
+        input_images: list[ImageInputLike] | None = None,
         **kwargs: Any,
     ) -> tuple[bytes, str]:
         """
@@ -117,6 +119,7 @@ class LLMDispatcher:
             model=model,
             response_mime_type=response_mime_type,
             image_config=image_config,
+            input_images=input_images,
             **kwargs,
         )
 

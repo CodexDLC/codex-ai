@@ -33,6 +33,16 @@ prompt: str
     -> (bytes, actual_mime_type)
 ```
 
+With `input_images`, the provider sends multimodal content:
+
+```
+prompt: str + input_images: list[ImageInput]
+    -> text part + inline_data image parts
+    -> GeminiProvider.generate_image_bytes()
+    -> first returned inline_data image part
+    -> (bytes, actual_mime_type)
+```
+
 `response_mime_type` is not passed to `GenerateContentConfig.response_mime_type` on this path; it is only a fallback content type when Gemini omits `inline_data.mime_type`.
 When `image_config.image_size` is `4K` and Gemini rejects the request, the provider retries once with `image_size` changed to `2K`.
 
@@ -51,7 +61,30 @@ prompt: str
 ```
 PromptResult | str
     -> OpenAIProvider.generate_text()
-    -> chat.completions.create()
-    -> choices[0].message.content
+    -> _OpenAIRequestMapper
+    -> responses.create(store=False)
+    -> response.output_text
     -> str
+```
+
+## OpenAI Structured JSON
+
+```
+PromptResult | str + Pydantic schema
+    -> OpenAIProvider.generate_json()
+    -> responses.parse(text_format=schema)
+    -> response.output_parsed
+    -> BaseModel
+```
+
+Without a schema, the provider requests JSON mode and decodes `response.output_text`.
+
+## OpenAI Streaming
+
+```
+PromptResult | str
+    -> OpenAIProvider.stream_text()
+    -> responses.create(stream=True)
+    -> response.output_text.delta events
+    -> AsyncIterator[str]
 ```

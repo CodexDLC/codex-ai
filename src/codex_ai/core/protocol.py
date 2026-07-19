@@ -14,7 +14,7 @@ PromptBuilder — type alias for async builder functions registered via LLMRoute
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
@@ -62,6 +62,24 @@ class PromptResult(BaseDTO):
     model: str | None = None
     temperature: float | None = None
     max_tokens: int | None = None
+
+
+class ImageInput(BaseDTO):
+    """
+    Binary image input used as a reference or edit source for image generation.
+
+    Attributes:
+        data: Raw image bytes.
+        mime_type: Image MIME type, for example ``"image/png"`` or ``"image/jpeg"``.
+    """
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    data: bytes
+    mime_type: str
+
+
+ImageInputLike = ImageInput | Mapping[str, Any]
 
 
 @runtime_checkable
@@ -150,6 +168,7 @@ class ImageGenerationProvider(Protocol):
         model: str | None = None,
         response_mime_type: str = "image/webp",
         image_config: dict[str, Any] | None = None,
+        input_images: list[ImageInputLike] | None = None,
         **kwargs: Any,
     ) -> tuple[bytes, str]:
         """
@@ -161,6 +180,8 @@ class ImageGenerationProvider(Protocol):
             response_mime_type: Requested/preferred image MIME type.
             image_config: Optional image generation controls such as
                 ``{"aspect_ratio": "1:1", "image_size": "4K"}``.
+            input_images: Optional reference/source images for image editing or
+                image-conditioned generation.
             **kwargs: Extra provider-specific kwargs.
 
         Returns:

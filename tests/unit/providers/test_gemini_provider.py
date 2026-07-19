@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from codex_ai.core.exceptions import LLMProviderError
 from codex_ai.core.protocol import (
     ImageGenerationProvider,
+    ImageInput,
     ImagenGenerationProvider,
     JsonGenerationProvider,
     LLMMessage,
@@ -382,6 +383,34 @@ async def test_gemini_generate_image_bytes_uses_image_model_not_text_model():
     _, kwargs = mock_generate.call_args
     assert kwargs["model"] == "image-model"
     assert kwargs["contents"] == "draw a castle"
+
+
+async def test_gemini_generate_image_bytes_accepts_reference_images():
+    provider, mock_generate, _ = _make_provider()
+    mock_generate.return_value = _image_response()
+
+    with patch("codex_ai.providers.gemini.genai_types") as mock_types:
+        mock_types.Modality.IMAGE = "IMAGE"
+        mock_types.GenerateContentConfig.return_value = MagicMock()
+        await provider.generate_image_bytes(
+            "redraw this as watercolor",
+            input_images=[
+                ImageInput(data=b"png-bytes", mime_type="image/png"),
+                {"data": bytearray(b"jpeg-bytes"), "mime_type": "image/jpeg"},
+            ],
+        )
+
+    _, kwargs = mock_generate.call_args
+    assert kwargs["contents"] == [
+        {
+            "role": "user",
+            "parts": [
+                {"text": "redraw this as watercolor"},
+                {"inline_data": {"data": b"png-bytes", "mime_type": "image/png"}},
+                {"inline_data": {"data": b"jpeg-bytes", "mime_type": "image/jpeg"}},
+            ],
+        }
+    ]
 
 
 async def test_gemini_generate_image_bytes_default_image_model_matches_api_id():

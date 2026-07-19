@@ -1,7 +1,7 @@
 import pytest
 
 from codex_ai.core.dispatcher import LLMDispatcher
-from codex_ai.core.protocol import PromptResult
+from codex_ai.core.protocol import ImageInput, PromptResult
 from codex_ai.core.router import LLMRouter
 
 
@@ -127,9 +127,10 @@ class ImageProvider:
         model: str | None = None,
         response_mime_type: str = "image/webp",
         image_config: dict | None = None,
+        input_images: list[ImageInput] | None = None,
         **kwargs,
     ) -> tuple[bytes, str]:
-        self.calls.append((prompt, model, response_mime_type, image_config, kwargs))
+        self.calls.append((prompt, model, response_mime_type, image_config, input_images, kwargs))
         return b"image-bytes", "image/png"
 
     async def generate_imagen_bytes(
@@ -161,12 +162,20 @@ async def test_dispatcher_generate_image_bytes_delegates_to_image_provider():
         model="gemini-image",
         response_mime_type="image/webp",
         image_config={"aspect_ratio": "1:1", "image_size": "4K"},
+        input_images=[ImageInput(data=b"source", mime_type="image/png")],
         seed=123,
     )
 
     assert result == (b"image-bytes", "image/png")
     assert provider.calls == [
-        ("draw a castle", "gemini-image", "image/webp", {"aspect_ratio": "1:1", "image_size": "4K"}, {"seed": 123})
+        (
+            "draw a castle",
+            "gemini-image",
+            "image/webp",
+            {"aspect_ratio": "1:1", "image_size": "4K"},
+            [ImageInput(data=b"source", mime_type="image/png")],
+            {"seed": 123},
+        )
     ]
 
 

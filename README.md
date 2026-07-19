@@ -5,7 +5,7 @@
 [![CI](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/codexdlc/codex-ai/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/codexdlc/codex-ai/blob/main/LICENSE)
 
-Gemini-first API helpers for the Codex ecosystem. The active surface is direct Gemini text, JSON, Gemini image, and Imagen generation. OpenAI remains as a small text-only adapter, and the router/dispatcher layer is kept for legacy text workflows.
+Gemini-first API helpers for the Codex ecosystem. The active surface is direct Gemini text, JSON, Gemini image, and Imagen generation. OpenAI provides modern Responses API text, structured JSON, and streaming helpers. The router/dispatcher layer is kept for legacy text workflows.
 
 ## Install
 
@@ -21,9 +21,11 @@ Requires Python 3.12 or newer.
 ## Gemini Direct API
 
 ```python
+from pathlib import Path
+
 from pydantic import BaseModel
 
-from codex_ai import GeminiProvider
+from codex_ai import GeminiProvider, ImageInput
 
 
 class LootItem(BaseModel):
@@ -42,6 +44,13 @@ image_bytes, content_type = await gemini.generate_image_bytes(
     image_config={"aspect_ratio": "1:1", "image_size": "4K"},
 )
 
+source_image_bytes = Path("source.png").read_bytes()
+edited_bytes, edited_content_type = await gemini.generate_image_bytes(
+    "Keep the composition, but redraw it as a watercolor map.",
+    response_mime_type="image/png",
+    input_images=[ImageInput(data=source_image_bytes, mime_type="image/png")],
+)
+
 imagen_bytes, imagen_content_type = await gemini.generate_imagen_bytes(
     "A fantasy clan banner, game icon style.",
     response_mime_type="image/jpeg",
@@ -54,9 +63,38 @@ imagen_bytes, imagen_content_type = await gemini.generate_imagen_bytes(
 `response_mime_type` as a preferred/fallback MIME type. It does not pass image MIME values
 to Gemini's text `response_mime_type` config field. Pass Gemini image controls such as
 `aspect_ratio` and `image_size` with `image_config`; if a `4K` request is rejected,
-the Gemini provider retries once with `2K`. Use `generate_imagen_bytes()` for
+the Gemini provider retries once with `2K`. Pass `input_images` with `ImageInput`
+items to provide reference/edit-source images for Gemini image models. Use `generate_imagen_bytes()` for
 Imagen models; that path uses `generate_images` and passes the requested MIME as
 `output_mime_type`.
+
+## OpenAI Responses API
+
+```python
+from pydantic import BaseModel
+
+from codex_ai import OpenAIProvider
+
+
+class LootItem(BaseModel):
+    name: str
+    power: int
+
+
+openai = OpenAIProvider(api_key="sk-...")
+
+text = await openai.generate_text("Write one short tavern rumor.")
+loot = await openai.generate_json("Create one loot item.", schema=LootItem)
+
+async for chunk in openai.stream_text("Tell a short story."):
+    print(chunk, end="")
+```
+
+The OpenAI provider uses the Responses API and the `openai` 2.x SDK. Responses
+are not stored by default. Its default `gpt-5.6-luna` model uses
+`reasoning={"effort": "none"}` to retain a cost- and latency-sensitive role;
+override the model and reasoning options per request when a workload needs more
+capability.
 
 ## Legacy Text Router
 
@@ -89,7 +127,7 @@ New Gemini integrations should call `generate_text()`, `generate_json()`,
 | Module | Extra | Description |
 | :--- | :--- | :--- |
 | `codex_ai.providers.gemini` | `[gemini]` | Primary API: Gemini text, JSON, Gemini image, and Imagen generation via pinned `google-genai` |
-| `codex_ai.providers.openai` | `[openai]` | Text-only OpenAI Chat Completions adapter |
+| `codex_ai.providers.openai` | `[openai]` | OpenAI Responses API text, structured JSON, and streaming adapter |
 | `codex_ai.core` | - | Legacy text router/dispatcher contracts and shared provider exceptions |
 
 ## Development

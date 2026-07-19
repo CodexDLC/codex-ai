@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-07-19
+
+### Added
+- Added `ImageInput` and optional `input_images` support to Gemini `generate_image_bytes()` for image reference/edit workflows.
+- Added OpenAI structured output generation through `generate_json()` with native Pydantic parsing.
+- Added typed OpenAI Responses API text streaming through `stream_text()`.
+
+### Changed
+- Replaced the OpenAI Chat Completions implementation with the Responses API.
+- Updated the OpenAI SDK requirement to `openai>=2.0,<3.0`.
+- Changed the OpenAI default model to `gpt-5.6-luna` with `reasoning={"effort": "none"}` and `store=False` defaults.
+
+## [0.2.4] - 2026-05-21
+
+### Changed
+- Widened the supported `codex-core` range to include the `0.4.x` series.
+- Clarified the Gemini-first provider focus in the package documentation.
+
 ## [0.2.3] - 2026-05-17
 
 ### Added

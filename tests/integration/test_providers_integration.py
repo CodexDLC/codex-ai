@@ -32,8 +32,8 @@ def _simple_prompt(text: str = "Say 'ok' and nothing else.") -> PromptResult:
 async def test_openai_provider_real_call():
     from codex_ai.providers.openai import OpenAIProvider
 
-    provider = OpenAIProvider(api_key=os.environ["OPENAI_API_KEY"], model="gpt-4o-mini")
-    result = await provider.answer(_simple_prompt(), max_tokens=10)
+    provider = OpenAIProvider(api_key=os.environ["OPENAI_API_KEY"], model="gpt-5.6-luna")
+    result = await provider.answer(_simple_prompt(), max_output_tokens=10)
     assert isinstance(result, str)
     assert len(result) > 0
 
@@ -49,7 +49,7 @@ async def test_openai_dispatcher_end_to_end():
     async def build_ping(**kw) -> PromptResult:
         return _simple_prompt(kw.get("text", "Say 'pong'."))
 
-    provider = OpenAIProvider(api_key=os.environ["OPENAI_API_KEY"], model="gpt-4o-mini")
+    provider = OpenAIProvider(api_key=os.environ["OPENAI_API_KEY"], model="gpt-5.6-luna")
     dispatcher = LLMDispatcher(provider=provider)
     dispatcher.include_router(router)
 
