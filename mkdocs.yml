@@ -59,6 +59,7 @@ plugins:
 nav:
   - Home: index.md
   - Guide (EN):
+      - Agent Skill: en/agent-skill.md
       - Architecture:
           - Core:
               - Overview: en/architecture/core/README.md
@@ -67,6 +68,7 @@ nav:
               - Overview: en/architecture/providers/README.md
               - Data Flow: en/architecture/providers/data_flow.md
   - Руководство (RU):
+      - Навык агента: ru/agent-skill.md
       - Архитектура:
           - Core:
               - Обзор: ru/architecture/core/README.md
