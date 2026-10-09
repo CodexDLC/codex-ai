@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-10-09
+
+### Added
+
+- Added a project development skill and an optional packaged consumer skill for `codex-ai` integrations.
+- Added an offline `python -m codex_ai.agent_skills` installer with install, update, status, and delete commands, ownership checks, path validation, and rollback for ordinary I/O failures.
+- Added English and Russian guides for installing and maintaining the optional agent skill.
+
+### Changed
+
+- Widened the supported `codex-core` range to include the additive `0.5.x` agent-skill release.
+- Refreshed the development and documentation lockfile to use patched versions of AnyIO, cryptography, pip, pyasn1, urllib3, virtualenv, Material for MkDocs, and PyMdown Extensions.
+
 ## [0.2.5] - 2026-07-19
 
 ### Added
