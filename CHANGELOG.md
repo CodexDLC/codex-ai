@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Widened the supported `codex-core` range to include the additive `0.5.x` agent-skill release.
 - Refreshed the development and documentation lockfile to use patched versions of AnyIO, cryptography, pip, pyasn1, urllib3, virtualenv, Material for MkDocs, and PyMdown Extensions.
 
 ## [0.2.5] - 2026-07-19
