@@ -18,6 +18,16 @@ pip install "codex-ai[openai,gemini]"
 
 Requires Python 3.12 or newer.
 
+## Optional agent skill
+
+Starting with version 0.2.6, the package includes an offline guide for agents integrating `codex-ai` into another project. Installing the Python package alone does not change that project's files. Install the guide explicitly:
+
+```bash
+python -m codex_ai.agent_skills install --project /path/to/project
+```
+
+The installer manages `.agents/skills/codex-ai/` and a marked instruction block in the target project's `AGENTS.md`. It preserves unrelated content and refuses to overwrite local changes to managed files. See the [agent skill installation guide](https://codexdlc.github.io/codex-ai/latest/en/agent-skill/) for status, package upgrades, updates, deletion, and Windows examples. The installer itself needs no provider SDK extra.
+
 ## Gemini Direct API
 
 ```python
